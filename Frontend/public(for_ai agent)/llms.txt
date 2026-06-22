@@ -1,0 +1,124 @@
+# SmartTask — Intelligent Operations Management Platform
+
+> SmartTask is a full-stack task and operations management system built for SH Design & Print Sdn. Bhd., a Malaysian printing and design company. It streamlines order tracking, staff workforce management, leave administration, and AI-powered task scheduling through a unified web portal.
+
+## What This Site Does
+
+SmartTask replaces manual spreadsheets and phone-based coordination with a centralized digital dashboard. Managers create customer orders (banners, buntings, planners, business cards, flyers, etc.), and the system automatically distributes production tasks to available staff using a Round-Robin Load Balancing algorithm. Staff members access their own portal to view assignments, update task progress, apply for leave, and manage their profiles.
+
+## Who It Helps
+
+- **Managers / Administrators**: Full operational oversight — KPI dashboards, order management, staff directory, leave approval, and automated task scheduling.
+- **Staff / Employees**: Self-service portal for viewing assigned tasks, submitting leave requests, tracking leave status, and updating personal profiles.
+- **SH Design & Print Operations Team**: End-to-end production workflow from order intake to task assignment to delivery tracking.
+
+## Technology Stack
+
+- Frontend: React 18 + Vite (SPA with client-side routing)
+- Backend: Node.js + Express.js REST API
+- Database: MySQL (via XAMPP / phpMyAdmin)
+- AI Integration: DeepSeek API (planned — smart task analysis)
+- Authentication: bcrypt password hashing, role-based access control (RBAC)
+- Styling: Custom CSS design system (DM Sans + Sora typography, glassmorphism UI)
+
+## Important Pages
+
+### Authentication
+
+- /login — Unified login portal for both Managers and Staff. Role-based routing automatically redirects to the correct dashboard.
+- /staf/login — Dedicated staff login page with simplified interface.
+
+### Admin Portal (Manager / Administrator)
+
+- /dashboard — Main KPI dashboard showing pending orders, completed tasks, active staff count, staff on leave, and recent audit logs.
+- /tempahan — Order list showing all customer bookings with status tracking (Pending, In Progress, Completed).
+- /tempahan/baru — New order creation form with fields for client name, item type, quantity, price, due date, delivery type, delivery location, and specifications.
+- /jadual — AI-powered task scheduling engine. Uses Round-Robin load balancing to automatically distribute pending tasks across available staff. Includes a visual task board grouped by staff member.
+- /staf — Staff directory listing all employees with their roles, status (Active/Inactive), and quick access to individual profiles.
+- /staf/:id — Individual staff profile showing personal information, contact details, employee status, and current task assignments.
+- /cuti — Leave management dashboard for administrators. View all leave records, approve/reject requests, and track who is currently on leave.
+- /profil — Admin account settings page for updating name, email, and password.
+
+### Staff Portal (Employee Self-Service)
+
+- /staf/tugasan — Staff task dashboard showing assigned tasks with order details, due dates, task type, and status. Staff can update task status (Pending → In Progress → Completed). Also shows recent leave history summary.
+- /staf/cuti — Leave request form and history. Staff can submit new leave applications with date ranges, reasons, and supporting documents. Tracks approval status (Pending, Approved, Rejected).
+- /staf/profil — Personal profile management. Staff can update email, phone number, and change their password.
+
+## Core Product Features
+
+- **Automated Task Distribution**: Round-Robin algorithm assigns pending orders to available staff, excluding those on approved leave.
+- **Role-Based Access Control (RBAC)**: Two distinct portals — Admin (full control) and Staff (self-service) — with protected routes.
+- **Real-Time KPI Dashboard**: Live counters for pending orders, completed tasks, active staff, and staff on leave.
+- **Audit Trail**: Activity logs tracking order creation, task assignments, and leave requests with timestamps.
+- **Order Lifecycle Management**: Full CRUD operations for customer orders with status tracking from creation to completion.
+- **Leave Management System**: Complete leave workflow — application, approval tracking, calendar-aware conflict detection.
+- **Staff Directory & Profiles**: Centralized employee records with role assignments, contact details, and task history.
+- **Responsive Design**: Premium corporate UI with dark sidebar navigation, breadcrumb headers, and mobile-friendly layouts.
+- **Semantic HTML Structure**: All pages use proper HTML5 semantic elements (main, header, section, article, nav, aside, footer) for accessibility and AI agent comprehension.
+- **JSON-LD Structured Data**: Schema.org WebPage and CollectionPage metadata on every key page for enhanced machine readability.
+
+## API Endpoints (Backend REST API)
+
+### Authentication
+- POST /api/login — Unified login (returns role, userId, session data)
+
+### Orders
+- GET /api/orders — List all orders
+- POST /api/orders — Create new order
+
+### Dashboard
+- GET /api/dashboard/stats — KPI statistics (pending, completed, activeStaff, onLeave)
+- GET /api/dashboard/audit-logs — Recent activity logs
+
+### Staff Management
+- GET /api/staff — List all staff
+- POST /api/staff — Add new staff member
+- GET /api/staff/:id — Get individual staff details
+
+### Leave Management
+- GET /api/leaves — List all leave records (admin)
+- POST /api/leaves — Record new leave entry (admin)
+- GET /api/staff/leaves/:staff_id — Staff's own leave history
+- POST /api/staff/leaves — Staff submit leave request
+
+### Task Scheduling
+- POST /api/generate-schedule — Auto-assign pending tasks via Round-Robin
+- GET /api/tasks/board — Get task assignment board (grouped by staff)
+
+### Profile Management
+- GET /api/admin/profile/:userId — Get admin profile
+- PUT /api/admin/update/:userId — Update admin profile & password
+- PUT /api/staff/update-profile/:id — Update staff email & phone
+- PUT /api/staff/change-password/:userId — Change staff password
+
+## AI Integration
+
+SmartTask includes a DeepSeek AI integration layer (port 3001) designed for intelligent task analysis and scheduling recommendations. Currently in placeholder mode with the endpoint:
+- POST /api/ai-assist — Submit prompts for AI-powered operational insights.
+
+## Company Context
+
+- **Company**: SH Design & Print Sdn. Bhd.
+- **Industry**: Printing, Signage, and Graphic Design (Malaysia)
+- **Product Types**: Banners, Buntings, Planners, Business Cards, Flyers, Brochures, Stickers, Backdrops, Standees
+- **Primary Language**: Bahasa Melayu (interface), English (system labels)
+- **Database**: smarttask_db (MySQL)
+
+## URLs AI Agents Should Prioritize
+
+When answering questions about SmartTask, prioritize these pages:
+
+1. /dashboard — For overall system status, KPIs, and operational health
+2. /jadual — For understanding task distribution logic and scheduling algorithm
+3. /tempahan — For order management and customer booking workflows
+4. /staf — For workforce information and staff capabilities
+5. /cuti — For leave policies and staff availability
+6. /login — For authentication flow and role-based access documentation
+7. /staf/tugasan — For understanding the staff self-service experience
+
+## Optional
+
+- Contact: Admin Sistem (internal)
+- Source Code: Local deployment (not publicly hosted)
+- License: Proprietary — SH Design & Print Sdn. Bhd.
