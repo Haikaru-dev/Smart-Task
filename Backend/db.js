@@ -1,25 +1,26 @@
+'use strict';
+// db.js memuatkan dotenv sendiri supaya pemboleh ubah persekitaran tersedia
+// walaupun db.js di-require sebelum dotenv.config() dipanggil dalam server.js
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const mysql = require('mysql2');
 
-// Konfigurasi sambungan pangkalan data ke XAMPP lokal
 const db = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'smarttask_db',
+    host:              process.env.DB_HOST     || 'localhost',
+    user:              process.env.DB_USER     || 'root',
+    password:          process.env.DB_PASSWORD || '',
+    database:          process.env.DB_NAME     || 'smarttask_db',
     waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+    connectionLimit:   10,
+    queueLimit:        0
 });
 
-// Semak sambungan
 db.getConnection((err, connection) => {
     if (err) {
         console.error('Ralat sambungan pangkalan data:', err.message);
     } else {
-        console.log('Berjaya disambungkan ke pangkalan data smarttask_db!');
-        connection.release(); // Lepaskan sambungan semula ke pool
+        console.log(`Berjaya disambungkan ke pangkalan data ${process.env.DB_NAME || 'smarttask_db'}!`);
+        connection.release();
     }
 });
 
-// Eksport sebagai promise supaya boleh guna async/await di server.js
 module.exports = db.promise();

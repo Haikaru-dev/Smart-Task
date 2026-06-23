@@ -95,7 +95,7 @@ export default function CutiStaf() {
     try {
       setLoadLeaves(true);
       setLeaveError(null);
-      const res = await axios.get(`http://localhost:5000/api/staff/leaves/${staffId}`);
+      const res = await axios.get(`${API_BASE_URL}/api/staff/leaves/${staffId}`);
       setLeaves(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ralat fetchLeaves:', err);
@@ -128,7 +128,7 @@ export default function CutiStaf() {
       setSubmitting(true);
       setToast(null);
 
-      await axios.post('http://localhost:5000/api/staff/leaves', {
+      await axios.post(`${API_BASE_URL}/api/staff/leaves`, {
         staff_id:   staffId,
         start_date: form.start_date,
         end_date:   form.end_date,

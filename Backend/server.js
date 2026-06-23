@@ -2,11 +2,13 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const db = require('./db');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { verifyToken, requireRole } = require('./middleware/auth');
 
 // Muatkan pembolehubah persekitaran (environment variables)
-dotenv.config();
+dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -76,15 +78,20 @@ app.post('/api/login', async (req, res) => {
             }
         }
 
-        // Log masuk berjaya — pulangkan data pengguna berserta peranan
+        // Log masuk berjaya — jana JWT token dan pulangkan data pengguna
+        const token = jwt.sign(
+            { userId: user.id, role: user.role, staffId },
+            process.env.JWT_SECRET || 'smarttask_dev_secret_TUKAR_DI_PRODUKSI',
+            { expiresIn: '8h' }
+        );
         res.status(200).json({
             success: true,
             message: 'Log masuk berjaya',
-            role:   user.role,     // 'Manager' atau 'Staff'
-            userId: user.id,       // ID dari jadual users
-            staffId: staffId,      // ID dari jadual staff
-            name:   staffName,     // Nama sebenar dari jadual staff (jika wujud)
-            // Untuk keserasian dengan kod lama:
+            token,
+            role:    user.role,
+            userId:  user.id,
+            staffId: staffId,
+            name:    staffName,
             user: {
                 id:       user.id,
                 username: user.username,
@@ -98,30 +105,6 @@ app.post('/api/login', async (req, res) => {
             success: false,
             error: 'Ralat pelayan dalaman.',
             detail: err.message
-        });
-    }
-});
-
-// API Endpoint ujian untuk mengambil semua data dari jadual Orders
-app.get('/api/orders', async (req, res) => {
-    try {
-        // Laksanakan query
-        const [rows] = await db.query('SELECT * FROM Orders');
-
-        // Pulangkan respon JSON sekiranya berjaya
-        res.status(200).json({
-            success: true,
-            message: 'Berjaya mengambil data dari jadual Orders',
-            data: rows
-        });
-    } catch (error) {
-        console.error('Ralat semasa mengambil data:', error.message);
-
-        // Pulangkan ralat sekiranya query gagal
-        res.status(500).json({
-            success: false,
-            message: 'Ralat pelayan dalaman',
-            error: error.message
         });
     }
 });
@@ -186,7 +169,7 @@ app.get('/api/orders', async (req, res) => {
 // ── DASHBOARD ENDPOINTS ──────────────────────────────────────────
 
 // Endpoint: statistik ringkasan untuk kad KPI dashboard
-app.get('/api/dashboard/stats', async (req, res) => {
+app.get('/api/dashboard/stats', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // Kira tempahan Pending
         const [[{ pending }]] = await db.query(
@@ -216,7 +199,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
 });
 
 // Endpoint: log aktiviti terkini (5 permohonan cuti terbaru + 5 tempahan terbaru)
-app.get('/api/dashboard/audit-logs', async (req, res) => {
+app.get('/api/dashboard/audit-logs', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // Ambil 5 rekod cuti terbaru
         const [leaveRows] = await db.query(`
@@ -330,7 +313,7 @@ app.post('/api/leaves', async (req, res) => {
 });
 
 // 1. Endpoint untuk Pengurus melihat semua permohonan cuti staf
-app.get('/api/manager/leaves', async (req, res) => {
+app.get('/api/manager/leaves', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // Menggunakan async/await (bertepatan dengan konfigurasi db.js projek)
         // Join jadual leaves dan staff untuk memaparkan nama staf dengan tepat
@@ -349,7 +332,7 @@ app.get('/api/manager/leaves', async (req, res) => {
 });
 
 // 2. Endpoint untuk Pengurus mengemas kini status cuti (Lulus/Ditolak)
-app.put('/api/manager/leaves/:id', async (req, res) => {
+app.put('/api/manager/leaves/:id', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const leaveId = req.params.id;
         const { status } = req.body; // 'Lulus', 'Ditolak', dsb.
@@ -369,7 +352,7 @@ app.put('/api/manager/leaves/:id', async (req, res) => {
 // ==========================================
 
 // 1. Endpoint untuk menjana agihan tugasan secara automatik (Round-Robin)
-app.post('/api/generate-schedule', async (req, res) => {
+app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // A. Cari tugas yang belum diagihkan
         const [tasks] = await db.query(
@@ -420,7 +403,7 @@ app.post('/api/generate-schedule', async (req, res) => {
 });
 
 // 2. Endpoint untuk memaparkan papan agihan (Kanban/Table view)
-app.get('/api/tasks/board', async (req, res) => {
+app.get('/api/tasks/board', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // Gabungkan Tasks + Orders + Staff dengan nama kolum yang betul
         const [results] = await db.query(`
@@ -446,7 +429,7 @@ app.get('/api/tasks/board', async (req, res) => {
 });
 
 // 3. Endpoint untuk agihan tugasan menggunakan Gemini AI (Function Calling & Proposal Mode)
-app.post('/api/manager/auto-assign', async (req, res) => {
+app.post('/api/manager/auto-assign', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // A. Ambil semua Orders yang berstatus 'Pending' atau 'In Progress'
         const [activeOrders] = await db.query(
@@ -659,6 +642,7 @@ Panggil fungsi 'assign_tasks' dengan jawapan anda.`;
 
         // H. Ekstrak cadangan daripada calls
         let assignments = [];
+        let aiExtractionFailed = false;
         try {
             const calls = (typeof resultAI.response.functionCalls === 'function') ? resultAI.response.functionCalls() : null;
             if (calls && calls.length > 0) {
@@ -677,15 +661,22 @@ Panggil fungsi 'assign_tasks' dengan jawapan anda.`;
             }
         } catch (e) {
             console.warn("Ralat semasa mengekstrak cadangan AI:", e.message);
+            aiExtractionFailed = true;
         }
 
-        // Pulangkan respons sebagai cadangan kepada UI (Bukan terus simpan ke pangkalan data)
-        res.status(200).json({ 
+        // Pulangkan cadangan kepada UI untuk semakan admin sebelum disimpan ke pangkalan data
+        const responsePayload = {
             success: true,
-            message: "Cadangan agihan tugas berjaya dijana oleh AI!", 
+            message: `${assignments.length} cadangan agihan tugasan berjaya dijana oleh AI!`,
             data: assignments,
             tasks: tasksForAI
-        });
+        };
+        if (assignments.length === 0) {
+            responsePayload.warning = aiExtractionFailed
+                ? 'AI menghadapi masalah semasa memproses cadangan. Sila cuba sekali lagi atau agih tugasan secara manual.'
+                : 'AI tidak memberikan sebarang cadangan. Sila cuba sekali lagi atau agih tugasan secara manual.';
+        }
+        res.status(200).json(responsePayload);
 
     } catch (err) {
         console.error("Ralat auto-assign Gemini:", err);
@@ -693,14 +684,95 @@ Panggil fungsi 'assign_tasks' dengan jawapan anda.`;
     }
 });
 
-// Endpoint baharu untuk menyimpan agihan tugasan yang disahkan oleh admin
-app.post('/api/tasks/save-assignments', async (req, res) => {
+// ── Pembantu: Padanan Kemahiran ───────────────────────────────────
+function checkSkillMatch(taskType, jobTitle) {
+    switch (taskType) {
+        case 'Design':   return jobTitle === 'Designer';
+        case 'Printing': return jobTitle === 'Operator Digital' || jobTitle === 'Operator Mesin (Banner/Bunting)';
+        case 'Packing':
+        case 'Delivery': return jobTitle === 'Finishing' || jobTitle.startsWith('Operator');
+        default:         return true; // jenis tugasan tidak dikenali — biarkan lulus
+    }
+}
+
+// ── Pembantu: Pengesahan agihan (kemahiran + konflik cuti) ────────
+async function validateAssignment(task_id, staff_id, start_time, end_time) {
+    const [[taskRow]] = await db.query(
+        `SELECT task_type FROM tasks WHERE id = ?`, [task_id]
+    );
+    if (!taskRow) return { valid: false, reason: `Tugasan #${task_id} tidak dijumpai.` };
+
+    const [[staffRow]] = await db.query(
+        `SELECT full_name, job_title FROM staff WHERE id = ?`, [staff_id]
+    );
+    if (!staffRow) return { valid: false, reason: `Staf #${staff_id} tidak dijumpai.` };
+
+    if (!checkSkillMatch(taskRow.task_type, staffRow.job_title)) {
+        return {
+            valid: false,
+            reason: `Staf "${staffRow.full_name}" (${staffRow.job_title}) tidak sepadan dengan jenis tugasan "${taskRow.task_type}".`
+        };
+    }
+
+    if (start_time && end_time) {
+        const startDate = new Date(start_time).toISOString().slice(0, 10);
+        const endDate   = new Date(end_time).toISOString().slice(0, 10);
+        const [conflicts] = await db.query(
+            `SELECT start_date, end_date FROM leaves
+             WHERE staff_id = ? AND status = 'Approved'
+               AND start_date <= ? AND end_date >= ?`,
+            [staff_id, endDate, startDate]
+        );
+        if (conflicts.length > 0) {
+            const lv = conflicts[0];
+            const s = lv.start_date instanceof Date ? lv.start_date.toISOString().slice(0, 10) : String(lv.start_date).slice(0, 10);
+            const e = lv.end_date   instanceof Date ? lv.end_date.toISOString().slice(0, 10)   : String(lv.end_date).slice(0, 10);
+            return {
+                valid: false,
+                reason: `Staf "${staffRow.full_name}" bercuti dari ${s} hingga ${e} — bertindih dengan tempoh tugasan.`
+            };
+        }
+    }
+
+    return { valid: true };
+}
+
+// Simpan cadangan agihan yang telah disemak dan disahkan oleh admin ke pangkalan data
+app.post('/api/tasks/save-assignments', verifyToken, requireRole('Manager'), async (req, res) => {
     const { assignments } = req.body;
 
-    if (!assignments || !Array.isArray(assignments)) {
-        return res.status(400).json({ 
-            success: false, 
-            error: "Format data tidak sah. Perlu menghantar senarai assignments." 
+    if (!assignments || !Array.isArray(assignments) || assignments.length === 0) {
+        return res.status(400).json({
+            success: false,
+            error: "Format data tidak sah. Perlu menghantar senarai assignments."
+        });
+    }
+
+    // Validasi sisi-server: masa tamat mesti lebih lewat daripada masa mula
+    for (const assign of assignments) {
+        const { task_id, start_time, end_time } = assign;
+        if (start_time && end_time && new Date(end_time) <= new Date(start_time)) {
+            return res.status(400).json({
+                success: false,
+                error: `Tugasan #${task_id}: masa tamat tidak boleh sebelum atau sama dengan masa mula.`
+            });
+        }
+    }
+
+    // Validasi kemahiran dan konflik cuti sebelum transaksi
+    const validationErrors = [];
+    for (const assign of assignments) {
+        const { task_id, staff_id, start_time, end_time } = assign;
+        if (staff_id) {
+            const check = await validateAssignment(task_id, staff_id, start_time, end_time);
+            if (!check.valid) validationErrors.push({ task_id, reason: check.reason });
+        }
+    }
+    if (validationErrors.length > 0) {
+        return res.status(422).json({
+            success: false,
+            error: `${validationErrors.length} tugasan gagal pengesahan kemahiran/cuti. Sila semak dan betulkan sebelum simpan.`,
+            validation_errors: validationErrors
         });
     }
 
@@ -709,32 +781,35 @@ app.post('/api/tasks/save-assignments', async (req, res) => {
         await connection.beginTransaction();
 
         for (const assign of assignments) {
-            const { task_id, staff_id, start_time, end_time } = assign;
+            // order_id TIDAK disentuh — perlindungan automatik kerana tiada dalam SET
+            const { task_id, staff_id, task_type, description, start_time, end_time } = assign;
 
             const formattedStart = start_time ? new Date(start_time).toISOString().slice(0, 19).replace('T', ' ') : null;
-            const formattedEnd = end_time ? new Date(end_time).toISOString().slice(0, 19).replace('T', ' ') : null;
+            const formattedEnd   = end_time   ? new Date(end_time).toISOString().slice(0, 19).replace('T', ' ')   : null;
 
             await connection.query(
-                `UPDATE tasks 
-                 SET assigned_staff_id = ?, start_time = ?, end_time = ?, status = 'Pending' 
+                `UPDATE tasks
+                 SET assigned_staff_id = ?, task_type = ?, description = ?,
+                     start_time = ?, end_time = ?,
+                     status = 'Pending', approval_status = 'Confirmed'
                  WHERE id = ?`,
-                [staff_id, formattedStart, formattedEnd, task_id]
+                [staff_id || null, task_type, description, formattedStart, formattedEnd, task_id]
             );
         }
 
         await connection.commit();
-        res.status(200).json({ 
-            success: true, 
-            message: "Jadual tugasan berjaya disimpan!" 
+        res.status(200).json({
+            success: true,
+            message: `${assignments.length} tugasan berjaya disimpan dan staf boleh melihatnya sekarang!`
         });
 
     } catch (error) {
         await connection.rollback();
         console.error("Ralat menyimpan agihan tugasan:", error);
-        res.status(500).json({ 
-            success: false, 
-            error: "Gagal menyimpan jadual.", 
-            detail: error.message 
+        res.status(500).json({
+            success: false,
+            error: "Gagal menyimpan jadual.",
+            detail: error.message
         });
     } finally {
         connection.release();
@@ -749,7 +824,7 @@ app.listen(PORT, () => {
 // ── PORTAL STAF ENDPOINTS ─────────────────────────────────────────
 
 // Endpoint: tugasan bagi staf tertentu berdasarkan staff_id
-app.get('/api/staff/tasks/:staff_id', async (req, res) => {
+app.get('/api/staff/tasks/:staff_id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staff_id = req.params.staff_id;
 
@@ -764,6 +839,7 @@ app.get('/api/staff/tasks/:staff_id', async (req, res) => {
             FROM tasks
             JOIN orders ON tasks.order_id = orders.id
             WHERE tasks.assigned_staff_id = ?
+              AND tasks.approval_status = 'Confirmed'
             ORDER BY tasks.id DESC`;
 
         const [results] = await db.query(sql, [staff_id]);
@@ -776,7 +852,7 @@ app.get('/api/staff/tasks/:staff_id', async (req, res) => {
 });
 
 // 1. Endpoint: staf lihat sejarah cuti sendiri
-app.get('/api/staff/leaves/:staff_id', async (req, res) => {
+app.get('/api/staff/leaves/:staff_id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staff_id = req.params.staff_id;
         const [results] = await db.query(
@@ -791,7 +867,7 @@ app.get('/api/staff/leaves/:staff_id', async (req, res) => {
 });
 
 // 2. Endpoint: staf hantar permohonan cuti baharu
-app.post('/api/staff/leaves', async (req, res) => {
+app.post('/api/staff/leaves', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const { staff_id, start_date, end_date, reason } = req.body;
 
@@ -817,7 +893,7 @@ app.post('/api/staff/leaves', async (req, res) => {
 // ── PORTAL STAF: PROFIL ENDPOINTS ────────────────────────────────
 
 // 1. Endpoint: kemaskini maklumat profil staf (email & phone_number)
-app.put('/api/staff/update-profile/:id', async (req, res) => {
+app.put('/api/staff/update-profile/:id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staffId = req.params.id;
         const { email, phone } = req.body;
@@ -844,7 +920,7 @@ app.put('/api/staff/update-profile/:id', async (req, res) => {
 });
 
 // 2. Endpoint: tukar kata laluan (dengan bcrypt hash — WAJIB untuk keselamatan)
-app.put('/api/staff/change-password/:userId', async (req, res) => {
+app.put('/api/staff/change-password/:userId', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const userId = req.params.userId;
         const { newPassword, currentPassword } = req.body;
@@ -889,7 +965,7 @@ app.put('/api/staff/change-password/:userId', async (req, res) => {
 // ── ADMIN: PROFIL ENDPOINTS ──────────────────────────────────────
 
 // 1. Endpoint untuk mendapatkan profil Admin
-app.get('/api/admin/profile/:userId', async (req, res) => {
+app.get('/api/admin/profile/:userId', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const userId = req.params.userId;
         const sql = `SELECT id, name, email, username, role FROM users WHERE id = ?`;
@@ -907,7 +983,7 @@ app.get('/api/admin/profile/:userId', async (req, res) => {
 });
 
 // 2. Endpoint untuk mengemaskini profil & kata laluan Admin
-app.put('/api/admin/update/:userId', async (req, res) => {
+app.put('/api/admin/update/:userId', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const userId = req.params.userId;
         const { name, email, password } = req.body;
@@ -934,5 +1010,80 @@ app.put('/api/admin/update/:userId', async (req, res) => {
     } catch (err) {
         console.error("Ralat MySQL admin/update:", err);
         res.status(500).json({ error: "Gagal mengemaskini profil Admin." });
+    }
+});
+
+// ── TUGASAN: DRAF MANAGEMENT ─────────────────────────────────────
+
+// Edit satu tugasan (admin ubah staf, jenis, deskripsi, masa)
+app.put('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const taskId = req.params.id;
+        const { assigned_staff_id, task_type, description, start_time, end_time } = req.body;
+        const fmtStart = start_time ? new Date(start_time).toISOString().slice(0, 19).replace('T', ' ') : null;
+        const fmtEnd   = end_time   ? new Date(end_time).toISOString().slice(0, 19).replace('T', ' ')   : null;
+
+        const [result] = await db.query(
+            `UPDATE tasks
+             SET assigned_staff_id = ?, task_type = ?, description = ?, start_time = ?, end_time = ?
+             WHERE id = ?`,
+            [assigned_staff_id || null, task_type, description, fmtStart, fmtEnd, taskId]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: "Tugasan tidak dijumpai." });
+        }
+        res.status(200).json({ message: "Tugasan berjaya dikemaskini!" });
+    } catch (err) {
+        console.error("Ralat PUT /api/tasks/:id:", err);
+        res.status(500).json({ error: "Gagal mengemaskini tugasan." });
+    }
+});
+
+// Sahkan draf: tukar approval_status → 'Confirmed' (semua atau terpilih)
+app.post('/api/tasks/confirm', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const { task_ids } = req.body || {};
+        let result;
+
+        if (Array.isArray(task_ids) && task_ids.length > 0) {
+            [result] = await db.query(
+                `UPDATE tasks SET approval_status = 'Confirmed'
+                 WHERE approval_status = 'Draft' AND id IN (?)`,
+                [task_ids]
+            );
+        } else {
+            [result] = await db.query(
+                `UPDATE tasks SET approval_status = 'Confirmed' WHERE approval_status = 'Draft'`
+            );
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `${result.affectedRows} tugasan berjaya disahkan! Staf kini boleh melihat tugasan mereka.`,
+            confirmed: result.affectedRows
+        });
+    } catch (err) {
+        console.error("Ralat POST /api/tasks/confirm:", err);
+        res.status(500).json({ error: "Gagal mengesahkan tugasan." });
+    }
+});
+
+// Padam draf: reset tugasan ke pool belum diagih (tiada hard delete)
+app.delete('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const taskId = req.params.id;
+        const [result] = await db.query(
+            `UPDATE tasks
+             SET assigned_staff_id = NULL, start_time = NULL, end_time = NULL, approval_status = 'Confirmed'
+             WHERE id = ? AND approval_status = 'Draft'`,
+            [taskId]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: "Tugasan draf tidak dijumpai atau sudah disahkan." });
+        }
+        res.status(200).json({ message: "Draf tugasan berjaya dipadam dan dikembalikan ke senarai belum diagih." });
+    } catch (err) {
+        console.error("Ralat DELETE /api/tasks/:id:", err);
+        res.status(500).json({ error: "Gagal memadam draf tugasan." });
     }
 });

@@ -62,7 +62,7 @@ export default function Cuti() {
   async function fetchLeaves() {
     try {
       setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/leaves');
+      const res = await axios.get(`${API_BASE_URL}/api/leaves`);
       setLeaves(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ralat mengambil rekod cuti:', err);
@@ -75,7 +75,7 @@ export default function Cuti() {
   // ── Ambil senarai staf untuk dropdown ──
   async function fetchStaff() {
     try {
-      const res = await axios.get('http://localhost:5000/api/staff');
+      const res = await axios.get(`${API_BASE_URL}/api/staff`);
       const data = res.data.data || res.data;
       setStaffList(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -114,7 +114,7 @@ export default function Cuti() {
     try {
       setIsSubmitting(true);
       setSubmitMsg(null);
-      await axios.post('http://localhost:5000/api/leaves', { staff_id, start_date, end_date, reason });
+      await axios.post(`${API_BASE_URL}/api/leaves`, { staff_id, start_date, end_date, reason });
       setSubmitMsg({ type: 'success', text: 'Cuti berjaya direkodkan!' });
       setFormData({ staff_id: '', start_date: '', end_date: '', reason: '' });
       fetchLeaves();

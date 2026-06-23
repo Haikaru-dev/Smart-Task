@@ -23,7 +23,7 @@ export default function PengurusanCuti() {
   const fetchLeaves = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/manager/leaves');
+      const res = await axios.get(`${API_BASE_URL}/api/manager/leaves`);
       setLeaves(res.data);
     } catch (err) {
       console.error('Ralat mengambil senarai cuti:', err);
@@ -46,7 +46,7 @@ export default function PengurusanCuti() {
       // Nota: Dalam sesetengah backend, 'Lulus' mungkin 'Approved'. Kita tetapkan sebagai 'Approved' jika Lulus untuk keserasian
       const dbStatus = status === 'Lulus' ? 'Approved' : 'Ditolak';
       
-      await axios.put(`http://localhost:5000/api/manager/leaves/${id}`, { status: dbStatus });
+      await axios.put(`${API_BASE_URL}/api/manager/leaves/${id}`, { status: dbStatus });
       alert(`Kejayaan: Permohonan cuti telah dikemas kini kepada ${status}!`);
       fetchLeaves(); // Muat semula jadual
     } catch (err) {

@@ -69,12 +69,15 @@ function Login() {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/login', {
+      const response = await axios.post(`${API_BASE_URL}/api/login`, {
         username,
         password,
       });
 
-      const { role, userId, name, user } = response.data;
+      const { role, userId, name, user, token } = response.data;
+
+      // Simpan JWT token untuk autentikasi API
+      if (token) localStorage.setItem('authToken', token);
 
       // Simpan sesi pengguna dalam localStorage
       const sessionData = {

@@ -21,7 +21,7 @@ export default function SenaraiStaf() {
   async function fetchStaff() {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/api/staff');
+      const response = await axios.get(`${API_BASE_URL}/api/staff`);
       const data = response.data.data || response.data;
       setStaff(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -41,7 +41,7 @@ export default function SenaraiStaf() {
     setDetailLoading(true);
     setSelectedStaff(null);
     try {
-      const res = await axios.get(`http://localhost:5000/api/staff/${staffId}`);
+      const res = await axios.get(`${API_BASE_URL}/api/staff/${staffId}`);
       setSelectedStaff(res.data.data || res.data);
     } catch (err) {
       console.error('Ralat mengambil profil staf:', err);
@@ -62,7 +62,7 @@ export default function SenaraiStaf() {
 
     try {
       setIsSubmitting(true);
-      await axios.post('http://localhost:5000/api/staff', formData);
+      await axios.post(`${API_BASE_URL}/api/staff`, formData);
       setIsModalOpen(false);
       setFormData({ name: '', role: '', status: 'Aktif' }); // reset borang
       fetchStaff(); // muat semula jadual

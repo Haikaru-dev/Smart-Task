@@ -93,7 +93,7 @@ export default function TugasanStaf() {
     try {
       setLoading(true);
       setError(null);
-      const res = await axios.get(`http://localhost:5000/api/staff/tasks/${staffId}`);
+      const res = await axios.get(`${API_BASE_URL}/api/staff/tasks/${staffId}`);
       setTasks(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ralat fetchTasks:', err);
@@ -141,7 +141,7 @@ export default function TugasanStaf() {
     try {
       // MVP: hantar ke endpoint kemaskini jika ada, atau papar kejayaan
       // Bila backend endpoint kemaskini status siap, gantikan dengan:
-      // await axios.patch(`http://localhost:5000/api/tasks/${activeTask.id}`, { status: form.status, staff_notes: form.notes });
+      // await axios.patch(`${API_BASE_URL}/api/tasks/${activeTask.id}`, { status: form.status, staff_notes: form.notes });
       await new Promise(r => setTimeout(r, 700)); // simulasi delay
 
       setSaveMsg({ type: 'success', text: 'Kemaskini berjaya disimpan!' });

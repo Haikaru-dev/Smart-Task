@@ -110,14 +110,14 @@ export default function ProfilStaf() {
       setLoading(true);
       
       // Ambil data staf
-      const resStaff = await axios.get(`http://localhost:5000/api/staff/${staffId}`);
+      const resStaff = await axios.get(`${API_BASE_URL}/api/staff/${staffId}`);
       const data = resStaff.data;
       setProfile(data);
       setEmail(data.email || '');
       setPhone(data.phone_number || '');
       
       // Ambil 3 sejarah cuti terkini untuk kad ringkasan
-      const resLeaves = await axios.get(`http://localhost:5000/api/staff/leaves/${staffId}`);
+      const resLeaves = await axios.get(`${API_BASE_URL}/api/staff/leaves/${staffId}`);
       if (Array.isArray(resLeaves.data)) {
         setLeaves(resLeaves.data.slice(0, 3));
       }
@@ -154,13 +154,13 @@ export default function ProfilStaf() {
 
     try {
       // 1. Kemaskini Profil (Email & Phone)
-      await axios.put(`http://localhost:5000/api/staff/update-profile/${staffId}`, {
+      await axios.put(`${API_BASE_URL}/api/staff/update-profile/${staffId}`, {
         email, phone
       });
       
       // 2. Kemaskini Kata Laluan (jika diisi)
       if (newPassword) {
-        await axios.put(`http://localhost:5000/api/staff/change-password/${userId}`, {
+        await axios.put(`${API_BASE_URL}/api/staff/change-password/${userId}`, {
           currentPassword,
           newPassword
         });

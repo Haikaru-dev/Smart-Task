@@ -30,7 +30,7 @@ export default function Tempahan() {
     async function fetchOrders() {
       try {
         setLoading(true);
-        const response = await axios.get('http://localhost:5000/api/orders');
+        const response = await axios.get(`${API_BASE_URL}/api/orders`);
         // Pangkalan data kadangkala menghantar dalam format response.data atau response.data.data
         const data = response.data.data || response.data;
         setOrders(Array.isArray(data) ? data : []);

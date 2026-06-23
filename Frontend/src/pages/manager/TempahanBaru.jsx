@@ -140,7 +140,7 @@ export default function TempahanBaru() {
         try {
             setLoading(true);
             // ── Hantar ke API ──
-            await axios.post('http://localhost:5000/api/orders', formData);
+            await axios.post(`${API_BASE_URL}/api/orders`, formData);
 
             // Berjaya
             setAlert({ type: 'success', message: 'Tempahan berjaya disimpan! Borang telah dikosongkan.' });

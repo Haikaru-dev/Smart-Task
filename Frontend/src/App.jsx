@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 // Layout (Sidebar + Topbar)
-import Layout from './components/layout';
+import Layout from './components/Layout';
 import StaffLayout from './components/StaffLayout';
 
 // Pages — hanya import apa yang sudah ada
@@ -27,11 +27,16 @@ import TugasanStaf from './pages/staff/TugasanStaf';
 import CutiStaf from './pages/staff/CutiStaf';
 import ProfilStaf from './pages/staff/ProfilStaf';
 
-// ── Protected Route (Semakan Log Masuk) ──
+// ── Protected Route: Portal Pengurus ──────────────────────────────
 function PrivateRoute({ children }) {
-  // Dalam langkah sebelum ini, jika anda simpan data pengguna sebagai 'user' di localStorage
-  const userLoggedIn = localStorage.getItem('user') || localStorage.getItem('token');
+  const userLoggedIn = localStorage.getItem('authToken') || localStorage.getItem('user');
   return userLoggedIn ? children : <Navigate to="/login" replace />;
+}
+
+// ── Protected Route: Portal Staf ──────────────────────────────────
+function StaffPrivateRoute({ children }) {
+  const staffLoggedIn = localStorage.getItem('staffUser');
+  return staffLoggedIn ? children : <Navigate to="/staf/login" replace />;
 }
 
 export default function App() {
@@ -69,7 +74,13 @@ export default function App() {
 
         {/* ── Portal Staf (Layout berasingan) ── */}
         <Route path="/staf/login" element={<LoginStaf />} />
-        <Route element={<StaffLayout />}>
+        <Route
+          element={
+            <StaffPrivateRoute>
+              <StaffLayout />
+            </StaffPrivateRoute>
+          }
+        >
           <Route path="/staf/tugasan" element={<TugasanStaf />} />
           <Route path="/staf/cuti" element={<CutiStaf />} />
           <Route path="/staf/profil" element={<ProfilStaf />} />

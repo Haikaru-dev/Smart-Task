@@ -69,8 +69,8 @@ export default function Dashboard() {
 
         // ── GANTIKAN URL dengan endpoint API anda yang sebenar ──
         const [statsRes, logsRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/dashboard/stats'),
-          axios.get('http://localhost:5000/api/dashboard/audit-logs'),
+          axios.get(`${API_BASE_URL}/api/dashboard/stats`),
+          axios.get(`${API_BASE_URL}/api/dashboard/audit-logs`),
         ]);
 
         setStats(statsRes.data);

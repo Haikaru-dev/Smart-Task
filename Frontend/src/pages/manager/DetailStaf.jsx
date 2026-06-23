@@ -22,7 +22,7 @@ export default function DetailStaf() {
     async function fetchStaffDetail() {
       try {
         setLoading(true);
-        const response = await axios.get(`http://localhost:5000/api/staff/${id}`);
+        const response = await axios.get(`${API_BASE_URL}/api/staff/${id}`);
         // Jika data dibungkus dalam 'data'
         const data = response.data.data || response.data;
         setStaff(data);

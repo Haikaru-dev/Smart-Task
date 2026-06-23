@@ -80,7 +80,7 @@ export default function ProfilAdmin() {
     try {
       setLoading(true);
       
-      const res = await axios.get(`http://localhost:5000/api/admin/profile/${userId}`);
+      const res = await axios.get(`${API_BASE_URL}/api/admin/profile/${userId}`);
       const data = res.data;
       setProfile(data);
       setName(data.name || data.username || '');
@@ -117,7 +117,7 @@ export default function ProfilAdmin() {
     }
 
     try {
-      await axios.put(`http://localhost:5000/api/admin/update/${userId}`, {
+      await axios.put(`${API_BASE_URL}/api/admin/update/${userId}`, {
         name,
         email,
         password: newPassword || undefined

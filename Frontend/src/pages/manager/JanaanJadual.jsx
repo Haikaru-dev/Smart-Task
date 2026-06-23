@@ -1,11 +1,11 @@
-// src/pages/JanaanJadual.jsx
-import { useState, useEffect, useCallback } from 'react';
+// src/pages/manager/JanaanJadual.jsx
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const SparkleIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
   </svg>
@@ -15,26 +15,41 @@ const TaskIcon = () => (
     <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
   </svg>
 );
-const UserCheckIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round">
-    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-    <polyline points="16 11 18 13 22 9" />
-  </svg>
-);
 const CheckCircleIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round">
     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
   </svg>
 );
 const RefreshIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
     <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
     <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
   </svg>
 );
+const EditIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+const TrashIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" />
+    <path d="M10 11v6M14 11v6M9 6V4h6v2" />
+  </svg>
+);
+const WarningIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
 
-// ── Helper: badge warna mengikut task_type ──
+// ── Helper functions ──────────────────────────────────────────────
 function getTypeBadge(type = '') {
   const map = {
     'Design':   { bg: '#EDE9FE', color: '#7C3AED' },
@@ -45,20 +60,37 @@ function getTypeBadge(type = '') {
   return map[type] || { bg: '#F1F5F9', color: '#475569' };
 }
 
-// ── Helper: badge warna mengikut status ──
 function getStatusBadge(status = '') {
   const s = status.toLowerCase();
-  if (s === 'completed') return { cls: 'badge badge-success', label: 'Selesai' };
+  if (s === 'completed')   return { cls: 'badge badge-success', label: 'Selesai' };
   if (s === 'in progress') return { cls: 'badge badge-info',    label: 'Dalam Proses' };
   return { cls: 'badge badge-warning', label: 'Menunggu' };
 }
 
-// ── Helper: initials dari nama ──
+function getApprovalBadge(val) {
+  if (val === 'Draft') return { label: 'Draf', bg: '#FEF3C7', color: '#92400E', border: '#FCD34D' };
+  return { label: 'Disahkan', bg: '#DCFCE7', color: '#166534', border: '#86EFAC' };
+}
+
 function getInitials(name = '') {
   return name.trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??';
 }
 
-// ── Warna avatar kolum staf (kitaran) ──
+function toLocalDatetime(val) {
+  if (!val) return '';
+  const d = val instanceof Date ? val : new Date(val);
+  if (isNaN(d)) return '';
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function formatDisplayDate(val) {
+  if (!val) return '—';
+  const d = new Date(val);
+  if (isNaN(d)) return val;
+  return d.toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 const STAFF_COLORS = [
   'linear-gradient(135deg,#1E40AF,#3B82F6)',
   'linear-gradient(135deg,#065F46,#059669)',
@@ -66,30 +98,48 @@ const STAFF_COLORS = [
   'linear-gradient(135deg,#6B21A8,#A855F7)',
   'linear-gradient(135deg,#0E7490,#06B6D4)',
 ];
+const TASK_TYPES = ['Design', 'Printing', 'Packing', 'Delivery'];
 
 // ================================================================
 // KOMPONEN UTAMA
 // ================================================================
 export default function JanaanJadual() {
-  const [board, setBoard]           = useState([]); // array of tasks from API
-  const [loading, setLoading]       = useState(true);
+  // ── State: papan agihan (DB) ──
+  const [board, setBoard]               = useState([]);
+  const [loading, setLoading]           = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError]           = useState(null);
-  const [toast, setToast]           = useState(null); // { type, text }
-  const [proposals, setProposals]   = useState(null);
-  const [proposalTasks, setProposalTasks] = useState([]);
-  const [staffList, setStaffList]   = useState([]);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [error, setError]               = useState(null);
+  const [toast, setToast]               = useState(null);
+  const [staffList, setStaffList]       = useState([]);
+
+  // ── State: cadangan AI (in-memory, belum disimpan ke DB) ──
+  const [proposals, setProposals]           = useState(null);
   const [savingProposal, setSavingProposal] = useState(false);
 
-  // ── Ambil papan agihan ──
+  // ── State: modal pengesahan padam cadangan ──
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const cancelDeleteRef                   = useRef(null);
+
+  // ── State: modal edit tugasan pada papan ──
+  const [editingTask, setEditingTask] = useState(null);
+  const [editForm, setEditForm]       = useState({});
+  const [isSaving, setIsSaving]       = useState(false);
+
+  // ── Toast helper ──
+  const showToast = useCallback((type, text) => {
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 5000);
+  }, []);
+
+  // ── Ambil papan agihan dari DB ──
   const fetchBoard = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await axios.get('http://localhost:5000/api/tasks/board');
+      const res = await axios.get(`${API_BASE_URL}/api/tasks/board`);
       setBoard(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      console.error('Ralat fetchBoard:', err);
+    } catch {
       setError('Gagal memuat papan agihan. Semak sambungan backend.');
     } finally {
       setLoading(false);
@@ -99,86 +149,223 @@ export default function JanaanJadual() {
   useEffect(() => {
     async function fetchStaff() {
       try {
-        const res = await axios.get('http://localhost:5000/api/staff');
-        setStaffList(res.data);
-      } catch (err) {
-        console.error('Ralat fetchStaff:', err);
-      }
+        const res = await axios.get(`${API_BASE_URL}/api/staff`);
+        setStaffList(Array.isArray(res.data) ? res.data : []);
+      } catch { /* senyap */ }
     }
     fetchStaff();
     fetchBoard();
   }, [fetchBoard]);
 
-  // ── Fungsi Jana Agihan (AI) ──
+  // ── Esc: tutup mana-mana modal aktif ──
+  useEffect(() => {
+    const onEsc = (e) => {
+      if (e.key !== 'Escape') return;
+      if (pendingDelete !== null) setPendingDelete(null);
+      else if (editingTask !== null) setEditingTask(null);
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [pendingDelete, editingTask]);
+
+  // ── Fokus butang "Batal" apabila modal padam dibuka (aksesibiliti) ──
+  useEffect(() => {
+    if (pendingDelete !== null) {
+      setTimeout(() => cancelDeleteRef.current?.focus(), 20);
+    }
+  }, [pendingDelete]);
+
+  // ────────────────────────────────────────────────────────────────
+  // HANDLERS: CADANGAN AI
+  // ────────────────────────────────────────────────────────────────
+
+  // Jana cadangan AI — simpan dalam state, BUKAN ke DB
   const handleJanaAgihan = async () => {
     try {
       setIsGenerating(true);
-      setToast(null);
-      setProposals(null);
-      const res = await axios.post('http://localhost:5000/api/manager/auto-assign');
-      if (res.data?.success && res.data?.data) {
-        if (res.data.data.length === 0) {
-          const msg = res.data.message || 'Tiada tugasan baharu untuk diagihkan.';
-          alert(msg);
-          setToast({ type: 'success', text: msg });
-        } else {
-          setProposals(res.data.data);
-          setProposalTasks(res.data.tasks || []);
-          setToast({ type: 'success', text: 'Cadangan agihan tugas berjaya dijana oleh AI!' });
-        }
-      } else {
-        const msg = res.data?.message || 'Tiada tugasan untuk diagihkan.';
-        alert(msg);
+      const res = await axios.post(`${API_BASE_URL}/api/manager/auto-assign`);
+      if (!res.data?.success) return;
+
+      const aiAssignments = res.data.data  || [];
+      const aiTasks       = res.data.tasks || [];
+
+      if (aiAssignments.length === 0) {
+        showToast('info', res.data.message || 'Tiada tugasan baharu untuk diagihkan.');
+        return;
       }
+
+      // Gabungkan assignments + task details menjadi satu array yang boleh diedit
+      const merged = aiAssignments.map(assign => {
+        const detail = aiTasks.find(t => t.task_id === assign.task_id) || {};
+        return {
+          task_id:          assign.task_id,
+          // Medan read-only (info tempahan):
+          order_number:      detail.order_number      || '',
+          client_name:       detail.client_name       || '',
+          item_type:         detail.item_type         || '',
+          quantity:          detail.quantity          || 0,
+          due_date:          detail.due_date          || '',
+          delivery_location: detail.delivery_location || '',
+          specifications:    detail.specifications    || '',
+          available_staff:   detail.available_staff   || [],
+          // Medan boleh diedit oleh admin:
+          staff_id:    assign.staff_id    || '',
+          task_type:   detail.task_type   || '',
+          description: detail.description || '',
+          start_time:  assign.start_time ? toLocalDatetime(assign.start_time) : '',
+          end_time:    assign.end_time   ? toLocalDatetime(assign.end_time)   : '',
+          // Validasi masa:
+          timeError: null
+        };
+      });
+
+      setProposals(merged);
+      showToast('success', res.data.message);
     } catch (err) {
-      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Gagal menjana agihan AI. Cuba semula.';
-      alert(errMsg); // Paparkan mesej ralat
-      setToast({ type: 'error', text: errMsg });
+      showToast('error', err.response?.data?.error || 'Gagal menjana cadangan AI. Cuba semula.');
     } finally {
       setIsGenerating(false);
-      setTimeout(() => setToast(null), 5000);
     }
   };
 
-  const handleProposalFieldChange = (taskId, field, value) => {
+  // Kemaskini satu medan pada satu cadangan (dengan validasi masa)
+  const handleProposalChange = (taskId, field, value) => {
     setProposals(prev => prev.map(p => {
-      if (p.task_id === taskId) {
-        return { ...p, [field]: value };
+      if (p.task_id !== taskId) return p;
+
+      // Tolak end_time tidak sah — kekalkan nilai lama, hanya tunjuk ralat
+      if (field === 'end_time' && p.start_time && value) {
+        if (new Date(value) <= new Date(p.start_time)) {
+          return { ...p, timeError: 'Masa tamat tidak boleh sebelum atau sama dengan masa mula.' };
+        }
       }
-      return p;
+
+      const updated = { ...p, [field]: value };
+
+      // Semak semula kesahihan kombinasi masa
+      const s = field === 'start_time' ? value : p.start_time;
+      const e = field === 'end_time'   ? value : p.end_time;
+      if (s && e) {
+        updated.timeError = new Date(e) <= new Date(s)
+          ? 'Masa tamat tidak boleh sebelum atau sama dengan masa mula.'
+          : null;
+      } else {
+        updated.timeError = null;
+      }
+
+      return updated;
     }));
   };
 
-  const handleSaveSchedule = async () => {
+  // Buka modal pengesahan padam
+  const handleDeleteProposalClick = (taskId) => setPendingDelete(taskId);
+
+  // Sahkan padam (operasi state sahaja, tiada panggilan API)
+  const confirmDeleteProposal = () => {
+    setProposals(prev => prev.filter(p => p.task_id !== pendingDelete));
+    setPendingDelete(null);
+  };
+
+  // Sahkan semua cadangan → simpan batch ke DB
+  const handleSahkanSemua = async () => {
+    if (!proposals || proposals.length === 0) return;
+
+    if (proposals.some(p => p.timeError)) {
+      showToast('error', 'Sila betulkan semua ralat masa sebelum mengesahkan.');
+      return;
+    }
+
+    const assignments = proposals.map(p => ({
+      task_id:     p.task_id,
+      staff_id:    p.staff_id,
+      task_type:   p.task_type,
+      description: p.description,
+      start_time:  p.start_time ? new Date(p.start_time).toISOString() : null,
+      end_time:    p.end_time   ? new Date(p.end_time).toISOString()   : null,
+    }));
+
     try {
       setSavingProposal(true);
-      const res = await axios.post('http://localhost:5000/api/tasks/save-assignments', {
-        assignments: proposals
-      });
-      alert(res.data?.message || 'Jadual tugasan berjaya disimpan!');
-      setToast({ type: 'success', text: res.data?.message || 'Jadual tugasan berjaya disimpan!' });
+      const res = await axios.post(`${API_BASE_URL}/api/tasks/save-assignments`, { assignments });
+      showToast('success', res.data?.message || 'Jadual tugasan berjaya disimpan!');
       setProposals(null);
-      setProposalTasks([]);
-      await fetchBoard(); // refresh papan Kanban
+      await fetchBoard();
     } catch (err) {
-      console.error('Ralat menyimpan jadual:', err);
-      const errMsg = err.response?.data?.error || 'Gagal menyimpan jadual. Cuba semula.';
-      alert(errMsg);
-      setToast({ type: 'error', text: errMsg });
+      showToast('error', err.response?.data?.error || 'Gagal menyimpan jadual. Cuba semula.');
     } finally {
       setSavingProposal(false);
-      setTimeout(() => setToast(null), 5000);
     }
   };
 
-  const handleCancelProposals = () => {
-    if (window.confirm('Adakah anda pasti mahu membatalkan cadangan agihan AI ini?')) {
-      setProposals(null);
-      setProposalTasks([]);
+  // ────────────────────────────────────────────────────────────────
+  // HANDLERS: PAPAN AGIHAN (DB)
+  // ────────────────────────────────────────────────────────────────
+
+  const handleConfirmAll = async () => {
+    if (!window.confirm(`Sahkan semua ${draftCount} tugasan draf pada papan?\nStaf akan dapat melihatnya selepas ini.`)) return;
+    try {
+      setIsConfirming(true);
+      const res = await axios.post(`${API_BASE_URL}/api/tasks/confirm`, {});
+      showToast('success', res.data?.message || 'Semua tugasan draf berjaya disahkan!');
+      await fetchBoard();
+    } catch {
+      showToast('error', 'Gagal mengesahkan tugasan. Cuba semula.');
+    } finally {
+      setIsConfirming(false);
     }
   };
 
-  // ── Kumpulkan tugasan mengikut nama staf ──
+  const handleEditTask = (task) => {
+    setEditingTask(task);
+    setEditForm({
+      assigned_staff_id: task.assigned_staff_id || '',
+      task_type:         task.task_type || '',
+      description:       task.description || '',
+      start_time:        toLocalDatetime(task.start_time),
+      end_time:          toLocalDatetime(task.end_time),
+    });
+  };
+
+  const handleEditSave = async () => {
+    try {
+      setIsSaving(true);
+      await axios.put(`${API_BASE_URL}/api/tasks/${editingTask.id}`, {
+        assigned_staff_id: Number(editForm.assigned_staff_id) || null,
+        task_type:   editForm.task_type,
+        description: editForm.description,
+        start_time:  editForm.start_time ? new Date(editForm.start_time).toISOString() : null,
+        end_time:    editForm.end_time   ? new Date(editForm.end_time).toISOString()   : null,
+      });
+      showToast('success', 'Tugasan berjaya dikemaskini!');
+      setEditingTask(null);
+      await fetchBoard();
+    } catch {
+      showToast('error', 'Gagal mengemaskini tugasan. Cuba semula.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteDraft = async (taskId, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Padam draf tugasan ini?\nTugasan akan dikembalikan ke senarai belum diagih.')) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/api/tasks/${taskId}`);
+      showToast('success', 'Draf tugasan berjaya dipadam.');
+      await fetchBoard();
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Gagal memadam draf tugasan.');
+    }
+  };
+
+  // ── Nilai terbitan ──
+  const hasProposals   = proposals !== null && proposals.length > 0;
+  const hasTimeError   = proposals?.some(p => p.timeError) ?? false;
+  const draftCount     = board.filter(t => t.approval_status === 'Draft').length;
+  const hasDrafts      = draftCount > 0;
+  const totalPending   = board.filter(t => t.status?.toLowerCase() === 'pending' && t.approval_status === 'Confirmed').length;
+  const totalCompleted = board.filter(t => t.status?.toLowerCase() === 'completed').length;
+
   const grouped = board.reduce((acc, task) => {
     const key = task.staff_name || 'Tidak Ditetapkan';
     if (!acc[key]) acc[key] = { role: task.staff_role || '', tasks: [] };
@@ -187,55 +374,46 @@ export default function JanaanJadual() {
   }, {});
   const staffColumns = Object.entries(grouped);
 
-  // ── Metrik ringkasan ──
-  const totalPending   = board.filter(t => t.status?.toLowerCase() === 'pending').length;
-  const totalCompleted = board.filter(t => t.status?.toLowerCase() === 'completed').length;
-  const totalStaff     = staffColumns.length;
-
   const kpiCards = [
-    { label: 'Tugasan Tertunggak',  value: totalPending,   cls: 'kpi-card kpi-card--blue', Icon: TaskIcon,       footer: 'Menunggu tindakan staf' },
-    { label: 'Staf Tersedia',       value: totalStaff,     cls: 'kpi-card kpi-card--cyan', Icon: UserCheckIcon,  footer: 'Staf dengan tugasan aktif' },
-    { label: 'Selesai Hari Ini',    value: totalCompleted, cls: 'kpi-card kpi-card--green',Icon: CheckCircleIcon, footer: 'Tugasan siap diselesaikan' },
+    {
+      label: 'Cadangan AI Aktif', value: proposals?.length ?? 0,
+      cls: 'kpi-card kpi-card--amber',
+      Icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>,
+      footer: proposals ? 'Menunggu pengesahan admin' : 'Jana cadangan AI baharu'
+    },
+    { label: 'Tugasan Aktif', value: totalPending,   cls: 'kpi-card kpi-card--blue',  Icon: TaskIcon,        footer: 'Tugasan diagihkan, menunggu staf' },
+    { label: 'Selesai',       value: totalCompleted, cls: 'kpi-card kpi-card--green', Icon: CheckCircleIcon, footer: 'Tugasan siap diselesaikan' },
   ];
 
-  // ── JSON-LD Data ──
   const jsonLdData = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
+    "@context": "https://schema.org", "@type": "WebPage",
     "name": "Janaan Jadual & Agihan Tugas - SmartTask",
-    "description": "Sistem agihan tugasan automatik berasaskan Load Balancing untuk mengagihkan kerja kepada pekerja/staf.",
-    "audience": {
-      "@type": "Audience",
-      "audienceType": "Administrators and Managers"
-    },
-    "about": {
-      "@type": "Thing",
-      "name": "Automated Task Scheduling"
-    }
+    "description": "Sistem agihan tugasan automatik berasaskan AI untuk staf SH Design & Print."
   };
 
+  // ================================================================
+  // RENDER
+  // ================================================================
   return (
     <div className="page-content">
       <JsonLd data={jsonLdData} />
 
-      {/* ── Toast Notifikasi ── */}
+      {/* ── Toast notifikasi ── */}
       {toast && (
         <div style={{
-          position: 'fixed', top: 20, right: 24, zIndex: 2000,
-          padding: '14px 20px', borderRadius: 12, maxWidth: 380,
-          background: toast.type === 'success' ? '#DCFCE7' : '#FEF2F2',
-          border: `1px solid ${toast.type === 'success' ? '#86EFAC' : '#FCA5A5'}`,
-          color: toast.type === 'success' ? '#15803D' : '#B91C1C',
-          fontWeight: 600, fontSize: 13,
-          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-          display: 'flex', alignItems: 'center', gap: 10,
-          animation: 'slideIn 0.25s ease'
+          position: 'fixed', top: 20, right: 24, zIndex: 3000,
+          padding: '14px 20px', borderRadius: 12, maxWidth: 420,
+          background: toast.type === 'success' ? '#DCFCE7' : toast.type === 'info' ? '#EFF6FF' : '#FEF2F2',
+          border: `1px solid ${toast.type === 'success' ? '#86EFAC' : toast.type === 'info' ? '#BFDBFE' : '#FCA5A5'}`,
+          color: toast.type === 'success' ? '#15803D' : toast.type === 'info' ? '#1E40AF' : '#B91C1C',
+          fontWeight: 600, fontSize: 13, boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+          display: 'flex', alignItems: 'center', gap: 10, animation: 'slideIn 0.25s ease'
         }}>
-          <span style={{ fontSize: 18 }}>{toast.type === 'success' ? '✓' : '⚠'}</span>
-          {toast.text}
+          <span>{toast.type === 'success' ? '✓' : toast.type === 'info' ? 'ℹ' : '⚠'}</span>
+          <span style={{ flex: 1 }}>{toast.text}</span>
           <button onClick={() => setToast(null)} style={{
-            marginLeft: 'auto', background: 'none', border: 'none',
-            fontSize: 18, cursor: 'pointer', color: 'inherit', lineHeight: 1
+            background: 'none', border: 'none', fontSize: 18,
+            cursor: 'pointer', color: 'inherit', lineHeight: 1, padding: '0 0 0 6px'
           }}>×</button>
         </div>
       )}
@@ -244,37 +422,21 @@ export default function JanaanJadual() {
       <header className="page-header flex-between">
         <div>
           <h1 className="page-title">Agihan Tugasan Pintar</h1>
-          <p className="page-subtitle">Sistem pengagihan automatik berasaskan Round-Robin Load Balancing</p>
+          <p className="page-subtitle">Jana cadangan AI → Semak &amp; Edit → Sahkan untuk staf</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button
-            className="btn btn--secondary"
-            onClick={fetchBoard}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn--secondary" onClick={fetchBoard}
             disabled={loading || isGenerating}
-            title="Muat semula"
-            style={{ padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <RefreshIcon />
-            Muat Semula
+            style={{ padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <RefreshIcon /> Muat Semula
           </button>
-          <button
-            id="btn-jana-agihan"
-            className="btn btn--primary"
-            onClick={handleJanaAgihan}
+          <button className="btn btn--primary" onClick={handleJanaAgihan}
             disabled={isGenerating || loading}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 200, justifyContent: 'center', opacity: isGenerating ? 0.7 : 1 }}
-          >
-            {isGenerating ? (
-              <>
-                <span style={spinnerStyle} />
-                AI Sedang Menganalisis...
-              </>
-            ) : (
-              <>
-                <SparkleIcon />
-                Jana Agihan (Auto)
-              </>
-            )}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 205,
+              justifyContent: 'center', opacity: isGenerating ? 0.75 : 1 }}>
+            {isGenerating
+              ? <><span style={spinSty} /> AI Sedang Menganalisis...</>
+              : <><SparkleIcon /> Jana Cadangan AI</>}
           </button>
         </div>
       </header>
@@ -295,341 +457,423 @@ export default function JanaanJadual() {
         ))}
       </div>
 
-      {/* ── Error Banner ── */}
-      {error && (
-        <div style={{
-          padding: '12px 20px', background: '#FEF2F2', border: '1px solid #FCA5A5',
-          borderRadius: 8, color: '#B91C1C', marginBottom: 20, fontSize: 13
-        }}>
-          ⚠ {error}
-        </div>
-      )}
-
-      {/* ── Bahagian Cadangan Agihan AI (Proposals) ── */}
-      {proposals && proposals.length > 0 && (
-        <section className="section-card" style={{ border: '2px dashed #3B82F6', marginBottom: 24 }} aria-label="Cadangan Agihan AI">
-          <header className="section-card-header" style={{ background: '#EFF6FF', borderBottom: '1px solid #BFDBFE' }}>
-            <div className="section-card-title" style={{ color: '#1E40AF' }}>
-              <div className="title-accent-dot" style={{ background: '#3B82F6' }} />
-              Cadangan Agihan Tugasan AI (Belum Disimpan)
-              <span className="badge" style={{ fontSize: 11, marginLeft: 8, background: '#DBEAFE', color: '#1E40AF', padding: '3px 9px', borderRadius: 20 }}>
-                {proposals.length} Cadangan
+      {/* ══════════════════════════════════════════════════════════
+          BAHAGIAN 1 — CADANGAN AI (IN-MEMORY, BELUM KE DB)
+      ══════════════════════════════════════════════════════════ */}
+      {hasProposals && (
+        <section className="section-card" aria-label="Cadangan Agihan AI">
+          {/* Header seksyen cadangan */}
+          <header className="section-card-header" style={{ flexWrap: 'wrap', gap: 10 }}>
+            <div className="section-card-title">
+              <div className="title-accent-dot" style={{ background: '#F59E0B' }} />
+              Cadangan Agihan AI
+              <span style={{
+                fontSize: 11, marginLeft: 6, padding: '2px 10px', borderRadius: 20,
+                background: '#FEF3C7', color: '#92400E', fontWeight: 700
+              }}>
+                {proposals.length} cadangan belum disimpan
               </span>
+              {hasTimeError && (
+                <span style={{
+                  fontSize: 11, marginLeft: 6, padding: '2px 10px', borderRadius: 20,
+                  background: '#FEF2F2', color: '#B91C1C', fontWeight: 700,
+                  display: 'inline-flex', alignItems: 'center', gap: 4
+                }}>
+                  <WarningIcon /> Ada ralat masa
+                </span>
+              )}
             </div>
-            <span className="section-card-meta" style={{ color: '#60A5FA' }}>Sila semak atau ubah suai agihan di bawah sebelum disimpan</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn--secondary"
+                onClick={() => { if (window.confirm('Buang semua cadangan AI ini?')) setProposals(null); }}
+                disabled={savingProposal}
+                style={{ fontSize: 12, padding: '7px 14px' }}>
+                × Buang Semua
+              </button>
+              <button className="btn btn--primary" onClick={handleSahkanSemua}
+                disabled={savingProposal || hasTimeError}
+                title={hasTimeError ? 'Betulkan semua ralat masa dahulu' : ''}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, minWidth: 195,
+                  justifyContent: 'center', opacity: hasTimeError ? 0.55 : 1,
+                  background: '#16A34A', borderColor: '#16A34A'
+                }}>
+                {savingProposal
+                  ? <><span style={spinSty} /> Menyimpan...</>
+                  : <><span>✓</span> Sahkan Semua ({proposals.length})</>}
+              </button>
+            </div>
           </header>
-          
-          <div style={{ padding: 24 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {proposals.map((proposal, index) => {
-                const taskInfo = proposalTasks.find(t => t.task_id === proposal.task_id) || {};
-                
-                // Format helper for datetime-local (expects YYYY-MM-DDTHH:mm)
-                const toLocalDatetime = (isoStr) => {
-                  if (!isoStr) return "";
-                  const date = new Date(isoStr);
-                  const pad = (n) => String(n).padStart(2, '0');
-                  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-                };
 
-                const typeBadge = getTypeBadge(taskInfo.task_type);
+          {/* Banner ralat masa */}
+          {hasTimeError && (
+            <div style={{
+              margin: '0 24px 4px', padding: '10px 16px', borderRadius: 8,
+              background: '#FEF2F2', border: '1px solid #FCA5A5',
+              fontSize: 12, color: '#B91C1C',
+              display: 'flex', alignItems: 'center', gap: 8
+            }}>
+              <WarningIcon />
+              Terdapat ralat validasi masa pada beberapa kad. Betulkan dahulu sebelum
+              butang "Sahkan Semua" boleh digunakan.
+            </div>
+          )}
 
-                return (
-                  <div key={proposal.task_id} style={{ 
-                    background: '#fff', 
-                    border: '1px solid #E2E8F0', 
-                    borderRadius: 12, 
-                    padding: 16,
-                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 12
+          {/* Grid kad cadangan */}
+          <div style={{ padding: '16px 24px 8px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {proposals.map((p, idx) => {
+              const tb         = getTypeBadge(p.task_type);
+              const assignedCtx = p.available_staff.find(s => String(s.id) === String(p.staff_id));
+              const hasCompress = !!assignedCtx?.compressed_window;
+
+              return (
+                <div key={p.task_id} style={{
+                  background: '#fff', borderRadius: 14,
+                  border: p.timeError ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0',
+                  boxShadow: p.timeError
+                    ? '0 2px 8px rgba(185,28,28,0.08)'
+                    : '0 1px 4px rgba(0,0,0,0.05)',
+                  overflow: 'hidden'
+                }}>
+
+                  {/* ── Kad Header (read-only metadata) ── */}
+                  <div style={{
+                    padding: '12px 18px', background: '#F8FAFC',
+                    borderBottom: '1px solid #EEF2F7',
+                    display: 'flex', alignItems: 'flex-start',
+                    justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'
                   }}>
-                    {/* Header bar of the proposal card */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
-                          background: typeBadge.bg, color: typeBadge.color,
-                          letterSpacing: '0.3px', textTransform: 'uppercase'
-                        }}>
-                          {taskInfo.task_type || 'Tugasan'}
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
-                          📋 {taskInfo.order_number || 'ORD-??'} · {taskInfo.client_name || 'Pelanggan'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 600 }}>
-                        Due: {taskInfo.due_date ? new Date(taskInfo.due_date).toLocaleDateString('ms-MY') : '—'}
-                      </div>
-                    </div>
-
-                    {/* Task description */}
-                    <p style={{ margin: 0, fontSize: 13, color: '#1E293B', fontWeight: 500 }}>
-                      {taskInfo.description || 'Tiada penerangan disediakan.'}
-                    </p>
-
-                    {/* Specifications if any */}
-                    {taskInfo.specifications && (
-                      <div style={{ fontSize: 11, color: '#64748B', background: '#F8FAFC', padding: '6px 10px', borderRadius: 6, borderLeft: '3px solid #CBD5E1' }}>
-                        <strong>Spesifikasi:</strong> {taskInfo.specifications}
-                      </div>
-                    )}
-
-                    {/* Leave conflicts warning/info */}
-                    {taskInfo.available_staff && taskInfo.available_staff.find(s => s.id === proposal.staff_id)?.compressed_window && (
-                      <div style={{ 
-                        fontSize: 11, 
-                        color: '#B91C1C', 
-                        background: '#FEF2F2', 
-                        padding: '8px 12px', 
-                        borderRadius: 8, 
-                        border: '1px solid #FCA5A5',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{
+                        fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20,
+                        background: tb.bg, color: tb.color,
+                        letterSpacing: '0.4px', textTransform: 'uppercase'
                       }}>
-                        <span>⚠️</span>
-                        <span>{taskInfo.available_staff.find(s => s.id === proposal.staff_id).compressed_window}</span>
-                      </div>
-                    )}
-
-                    {/* Interactive override controls */}
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                      gap: 12,
-                      marginTop: 4,
-                      paddingTop: 12,
-                      borderTop: '1px solid #F1F5F9'
+                        {p.task_type || 'Tidak Ditentukan'}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>
+                        Cadangan #{idx + 1}
+                      </span>
+                    </div>
+                    {/* Nombor tempahan — STATIK, tidak boleh ditukar */}
+                    <div style={{
+                      fontSize: 11, color: '#475569', fontWeight: 600,
+                      background: '#EEF2F7', padding: '4px 10px', borderRadius: 8,
+                      whiteSpace: 'nowrap', userSelect: 'none'
                     }}>
-                      {/* Staff dropdown selection */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Tugaskan Kepada:</label>
-                        <select 
-                          value={proposal.staff_id || ""}
-                          onChange={(e) => handleProposalFieldChange(proposal.task_id, 'staff_id', parseInt(e.target.value))}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: 8,
-                            border: '1px solid #CBD5E1',
-                            fontSize: 13,
-                            color: '#1E293B',
-                            background: '#fff'
-                          }}
-                        >
-                          <option value="">-- Pilih Staf --</option>
-                          {staffList.map(s => {
-                            const availContext = taskInfo.available_staff?.find(as => as.id === s.id);
-                            const workload = availContext ? availContext.workload : 0;
-                            const isExcluded = !availContext;
-                            
-                            return (
-                              <option key={s.id} value={s.id} disabled={isExcluded}>
-                                {s.name} ({s.role}) {workload > 0 ? `· ${workload} tugasan aktif` : ""} {isExcluded ? "· (Cuti Penuh)" : ""}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-
-                      {/* Start Time input */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Masa Mula:</label>
-                        <input 
-                          type="datetime-local"
-                          value={toLocalDatetime(proposal.start_time)}
-                          onChange={(e) => handleProposalFieldChange(proposal.task_id, 'start_time', new Date(e.target.value).toISOString())}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: 8,
-                            border: '1px solid #CBD5E1',
-                            fontSize: 13,
-                            color: '#1E293B'
-                          }}
-                        />
-                      </div>
-
-                      {/* End Time input */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Masa Tamat:</label>
-                        <input 
-                          type="datetime-local"
-                          value={toLocalDatetime(proposal.end_time)}
-                          onChange={(e) => handleProposalFieldChange(proposal.task_id, 'end_time', new Date(e.target.value).toISOString())}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: 8,
-                            border: '1px solid #CBD5E1',
-                            fontSize: 13,
-                            color: '#1E293B'
-                          }}
-                        />
-                      </div>
+                      📋 Tempahan: {p.order_number || '—'}
                     </div>
                   </div>
-                );
-              })}
-            </div>
 
-            {/* Action buttons for saving or cancelling proposals */}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24, paddingTop: 16, borderTop: '1px solid #BFDBFE' }}>
-              <button 
-                className="btn btn--secondary" 
-                onClick={handleCancelProposals}
-                disabled={savingProposal}
-                style={{ padding: '10px 20px' }}
-              >
-                Batal
-              </button>
-              <button 
-                className="btn btn--primary" 
-                onClick={handleSaveSchedule}
-                disabled={savingProposal}
-                style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 160, justifyContent: 'center' }}
-              >
-                {savingProposal ? (
-                  <>
-                    <span style={spinnerStyle} />
-                    Menyimpan Jadual...
-                  </>
-                ) : (
-                  <>
-                    <span>✓</span>
-                    Simpan Jadual
-                  </>
-                )}
-              </button>
-            </div>
+                  {/* ── Maklumat Tempahan (read-only) ── */}
+                  <div style={{ padding: '10px 18px 0', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    {p.client_name && (
+                      <span style={{ fontSize: 12, color: '#475569' }}>
+                        👤 <strong>{p.client_name}</strong>
+                      </span>
+                    )}
+                    {p.item_type && (
+                      <span style={{ fontSize: 12, color: '#475569' }}>
+                        📦 {p.item_type}{p.quantity ? ` (${p.quantity} unit)` : ''}
+                      </span>
+                    )}
+                    {p.due_date && (
+                      <span style={{ fontSize: 12, color: '#DC2626', fontWeight: 600 }}>
+                        🗓 Tarikh Akhir: {formatDisplayDate(p.due_date)}
+                      </span>
+                    )}
+                  </div>
+
+                  {p.specifications && (
+                    <div style={{ padding: '4px 18px 0' }}>
+                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, fontStyle: 'italic' }}>
+                        Spesifikasi: {p.specifications}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ── Amaran cuti separa ── */}
+                  {hasCompress && (
+                    <div style={{
+                      margin: '10px 18px 0', padding: '8px 12px', borderRadius: 8,
+                      background: '#FFFBEB', border: '1px solid #FCD34D',
+                      fontSize: 11, color: '#92400E',
+                      display: 'flex', alignItems: 'center', gap: 6
+                    }}>
+                      <WarningIcon />
+                      Staf ini mempunyai cuti separa bertindih. Tetingkap kerja terpadat antara{' '}
+                      {toLocalDatetime(assignedCtx.compressed_window.start).replace('T', ' ')} –{' '}
+                      {toLocalDatetime(assignedCtx.compressed_window.end).replace('T', ' ')}.
+                    </div>
+                  )}
+
+                  {/* ── Medan boleh diedit ── */}
+                  <div style={{
+                    padding: '14px 18px',
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 20px'
+                  }}>
+                    {/* Tugaskan kepada (full-width) */}
+                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>
+                        Tugaskan Kepada <span className="required">*</span>
+                      </label>
+                      <select className="form-select" value={p.staff_id} style={{ fontSize: 13 }}
+                        onChange={e => handleProposalChange(p.task_id, 'staff_id', e.target.value)}>
+                        <option value="">-- Pilih Staf --</option>
+                        {staffList.map(s => {
+                          const ctx     = p.available_staff.find(a => String(a.id) === String(s.id));
+                          const onLeave = !ctx;
+                          const wl      = ctx?.workload || 0;
+                          return (
+                            <option key={s.id} value={s.id} disabled={onLeave}>
+                              {s.name || s.full_name} ({s.role || s.job_title})
+                              {wl > 0 ? ` · ${wl} tugasan aktif` : ''}
+                              {onLeave ? ' · (Cuti)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Jenis Tugasan */}
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: 11 }}>
+                        Jenis Tugasan <span className="required">*</span>
+                      </label>
+                      <select className="form-select" value={p.task_type} style={{ fontSize: 13 }}
+                        onChange={e => handleProposalChange(p.task_id, 'task_type', e.target.value)}>
+                        <option value="">-- Pilih --</option>
+                        {TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Deskripsi (full-width) */}
+                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Deskripsi / Arahan</label>
+                      <textarea className="form-input" rows={2}
+                        value={p.description} placeholder="Penerangan tugasan kepada staf..."
+                        style={{ fontSize: 13, resize: 'vertical', minHeight: 56 }}
+                        onChange={e => handleProposalChange(p.task_id, 'description', e.target.value)} />
+                    </div>
+
+                    {/* Masa Mula */}
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: 11 }}>Masa Mula</label>
+                      <input type="datetime-local" className="form-input"
+                        value={p.start_time}
+                        style={{ fontSize: 13, borderColor: p.timeError ? '#FCA5A5' : undefined }}
+                        onChange={e => handleProposalChange(p.task_id, 'start_time', e.target.value)} />
+                    </div>
+
+                    {/* Masa Tamat (dengan atribut min untuk cegah nilai tidak sah di UI) */}
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: 11 }}>Masa Tamat</label>
+                      <input type="datetime-local" className="form-input"
+                        value={p.end_time}
+                        min={p.start_time || undefined}
+                        style={{ fontSize: 13, borderColor: p.timeError ? '#FCA5A5' : undefined }}
+                        onChange={e => handleProposalChange(p.task_id, 'end_time', e.target.value)} />
+                    </div>
+
+                    {/* Mesej ralat masa */}
+                    {p.timeError && (
+                      <div style={{
+                        gridColumn: '1 / -1', marginTop: -6,
+                        fontSize: 11, color: '#B91C1C', fontWeight: 600,
+                        display: 'flex', alignItems: 'center', gap: 5
+                      }}>
+                        <WarningIcon /> {p.timeError}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Butang Padam Cadangan ── */}
+                  <div style={{ padding: '0 18px 14px', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => handleDeleteProposalClick(p.task_id)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        padding: '6px 14px', borderRadius: 8,
+                        border: '1px solid #FCA5A5', background: '#FFF1F2',
+                        color: '#B91C1C', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                      }}>
+                      <TrashIcon /> Padam Cadangan
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer seksyen cadangan */}
+          <div style={{
+            borderTop: '1px solid #E8EDF3', padding: '16px 24px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: '#F8FAFC'
+          }}>
+            <p style={{ margin: 0, fontSize: 12, color: '#64748B' }}>
+              {proposals.length} cadangan · Staf akan menerima tugasan selepas "Sahkan Semua".
+            </p>
+            <button className="btn btn--primary" onClick={handleSahkanSemua}
+              disabled={savingProposal || hasTimeError}
+              title={hasTimeError ? 'Betulkan semua ralat masa dahulu' : ''}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, minWidth: 195,
+                justifyContent: 'center', opacity: hasTimeError ? 0.55 : 1,
+                background: '#16A34A', borderColor: '#16A34A'
+              }}>
+              {savingProposal
+                ? <><span style={spinSty} /> Menyimpan...</>
+                : <><span>✓</span> Sahkan Semua ({proposals.length})</>}
+            </button>
           </div>
         </section>
       )}
 
-      {/* ── Papan Agihan ── */}
+      {/* ══════════════════════════════════════════════════════════
+          BAHAGIAN 2 — PAPAN AGIHAN TUGASAN (DB-BACKED)
+      ══════════════════════════════════════════════════════════ */}
       <section className="section-card" aria-label="Papan Agihan Tugasan">
         <header className="section-card-header">
           <div className="section-card-title">
             <div className="title-accent-dot" />
             Papan Agihan Tugasan
             <span className="badge badge-gray" style={{ fontSize: 11, marginLeft: 4 }}>
-              {board.length} tugasan diagihkan
+              {board.length} tugasan
             </span>
+            {hasDrafts && (
+              <span style={{ fontSize: 11, marginLeft: 6, padding: '2px 9px', borderRadius: 20,
+                background: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>
+                {draftCount} Draf
+              </span>
+            )}
           </div>
-          <span className="section-card-meta">Dikumpul mengikut staf</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="section-card-meta">Dikumpul mengikut staf</span>
+            {hasDrafts && (
+              <button className="btn btn--primary" onClick={handleConfirmAll}
+                disabled={isConfirming}
+                style={{ fontSize: 12, padding: '6px 14px',
+                  background: '#D97706', borderColor: '#D97706',
+                  display: 'flex', alignItems: 'center', gap: 6 }}>
+                {isConfirming
+                  ? <><span style={{ ...spinSty, width: 11, height: 11 }} /> Mengesahkan...</>
+                  : <><span>✓</span> Sahkan Semua Agihan</>}
+              </button>
+            )}
+          </div>
         </header>
 
-        {/* Loading */}
+        {error && (
+          <div style={{ margin: '0 24px 16px', padding: '10px 16px', background: '#FEF2F2',
+            border: '1px solid #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>
+            ⚠ {error}
+          </div>
+        )}
+
         {loading ? (
           <div style={{ padding: '60px 24px', textAlign: 'center', color: '#94A3B8' }}>
-            <div style={{ ...spinnerStyle, width: 32, height: 32, borderWidth: 3, margin: '0 auto 14px' }} />
+            <div style={{ width: 32, height: 32, border: '3px solid #E2E8F0', borderTopColor: '#3B82F6',
+              borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 14px' }} />
             <p style={{ margin: 0, fontSize: 13 }}>Memuatkan papan agihan...</p>
           </div>
         ) : staffColumns.length === 0 ? (
-          /* Empty state */
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
-            <div style={{
-              width: 64, height: 64, borderRadius: '50%',
-              background: '#F1F5F9', margin: '0 auto 16px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                stroke="#94A3B8" strokeWidth={1.5} strokeLinecap="round">
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="7" height="7" rx="1" />
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#F1F5F9',
+              margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={1.5} strokeLinecap="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
               </svg>
             </div>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#334155' }}>
-              Tiada tugasan diagihkan
-            </p>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#334155' }}>Tiada tugasan diagihkan</p>
             <p style={{ margin: '6px 0 20px', fontSize: 13, color: '#94A3B8' }}>
-              Tekan butang <strong>"Jana Agihan (Auto)"</strong> untuk mengagihkan tugasan kepada staf secara automatik.
+              Tekan <strong>"Jana Cadangan AI"</strong> untuk menjana cadangan agihan tugasan.
             </p>
-            <button className="btn btn--primary" onClick={handleJanaAgihan} disabled={isGenerating}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, opacity: isGenerating ? 0.7 : 1 }}>
-              {isGenerating ? (
-                <>
-                  <span style={spinnerStyle} /> AI Sedang Menganalisis...
-                </>
-              ) : (
-                <>
-                  <SparkleIcon /> Jana Agihan Sekarang
-                </>
-              )}
+            <button className="btn btn--primary" onClick={handleJanaAgihan}
+              disabled={isGenerating}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, opacity: isGenerating ? 0.75 : 1 }}>
+              {isGenerating
+                ? <><span style={spinSty} /> AI Sedang Menganalisis...</>
+                : <><SparkleIcon /> Jana Cadangan AI</>}
             </button>
           </div>
         ) : (
-          /* Kanban Grid */
           <div style={{ padding: '20px 24px' }}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: 16
-            }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {staffColumns.map(([staffName, data], colIdx) => (
-                <div key={staffName} style={columnStyles.wrapper}>
-                  {/* Kolum Header — maklumat staf */}
-                  <div style={columnStyles.header}>
+                <div key={staffName} style={{ background: '#F8FAFC', borderRadius: 12,
+                  border: '1px solid #E8EDF3', overflow: 'hidden' }}>
+                  {/* Kolum header */}
+                  <div style={{ padding: '12px 14px', background: '#fff',
+                    borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{
                       width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
                       background: STAFF_COLORS[colIdx % STAFF_COLORS.length],
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 13, fontWeight: 700, color: '#fff'
-                    }}>
-                      {getInitials(staffName)}
-                    </div>
+                    }}>{getInitials(staffName)}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A', truncate: true }}>
-                        {staffName}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>
-                        {data.role || 'Staf'}
-                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{staffName}</div>
+                      <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{data.role || 'Staf'}</div>
                     </div>
-                    <span style={{
-                      background: '#EFF6FF', color: '#1D4ED8', fontSize: 11,
-                      fontWeight: 700, padding: '3px 9px', borderRadius: 20
-                    }}>
-                      {data.tasks.length} tugasan
+                    <span style={{ background: '#EFF6FF', color: '#1D4ED8', fontSize: 11,
+                      fontWeight: 700, padding: '3px 9px', borderRadius: 20 }}>
+                      {data.tasks.length}
                     </span>
                   </div>
-
-                  {/* Senarai Tugasan */}
+                  {/* Senarai kad */}
                   <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {data.tasks.map(task => {
-                      const typeBadge   = getTypeBadge(task.task_type);
-                      const { cls, label } = getStatusBadge(task.status);
+                      const tb      = getTypeBadge(task.task_type);
+                      const sb      = getStatusBadge(task.status);
+                      const ab      = getApprovalBadge(task.approval_status);
+                      const isDraft = task.approval_status === 'Draft';
                       return (
-                        <div key={task.id} style={taskCardStyles.wrapper}>
-                          {/* Jenis Tugasan */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                            <span style={{
-                              fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
-                              background: typeBadge.bg, color: typeBadge.color,
-                              letterSpacing: '0.3px', textTransform: 'uppercase'
-                            }}>
+                        <div key={task.id} onClick={() => handleEditTask(task)}
+                          style={{
+                            borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
+                            border: isDraft ? '1px solid #FCD34D' : '1px solid #E8EDF3',
+                            background: isDraft ? '#FFFDF0' : '#fff',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                          }}
+                          title="Klik untuk edit">
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px',
+                              borderRadius: 20, background: tb.bg, color: tb.color,
+                              textTransform: 'uppercase' }}>
                               {task.task_type}
                             </span>
-                            <span className={cls} style={{ fontSize: 10 }}>{label}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px',
+                              borderRadius: 20, background: ab.bg, color: ab.color,
+                              border: `1px solid ${ab.border}` }}>
+                              {ab.label}
+                            </span>
                           </div>
-
-                          {/* Keterangan */}
-                          <p style={{
-                            margin: '8px 0 0', fontSize: 12, color: '#334155',
-                            lineHeight: 1.5, display: '-webkit-box',
-                            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
-                          }}>
+                          <div style={{ marginTop: 5 }}>
+                            <span className={sb.cls} style={{ fontSize: 10 }}>{sb.label}</span>
+                          </div>
+                          <p style={{ margin: '5px 0 0', fontSize: 12, color: '#334155', lineHeight: 1.5,
+                            display: '-webkit-box', WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                             {task.description || '—'}
                           </p>
-
-                          {/* Maklumat Order */}
                           {task.order_number && (
-                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
+                            <div style={{ marginTop: 7, paddingTop: 7, borderTop: '1px solid #F1F5F9' }}>
                               <span style={{ fontSize: 11, color: '#64748B' }}>
-                                📋 {task.order_number}
-                                {task.client_name ? ` · ${task.client_name}` : ''}
+                                📋 {task.order_number}{task.client_name ? ` · ${task.client_name}` : ''}
                               </span>
+                            </div>
+                          )}
+                          {isDraft && (
+                            <div style={{ marginTop: 8, display: 'flex', gap: 6, justifyContent: 'flex-end' }}
+                              onClick={e => e.stopPropagation()}>
+                              <button onClick={() => handleEditTask(task)} style={actBtn('#EFF6FF','#1E40AF')}>
+                                <EditIcon /> Edit
+                              </button>
+                              <button onClick={e => handleDeleteDraft(task.id, e)} style={actBtn('#FEF2F2','#B91C1C')}>
+                                <TrashIcon /> Padam
+                              </button>
                             </div>
                           )}
                         </div>
@@ -643,40 +887,174 @@ export default function JanaanJadual() {
         )}
       </section>
 
-      {/* ── CSS Animation ── */}
+      {/* ══════════════════════════════════════════════════════════
+          MODAL: PENGESAHAN PADAM CADANGAN (custom, bukan window.confirm)
+      ══════════════════════════════════════════════════════════ */}
+      {pendingDelete !== null && (
+        <div
+          role="dialog" aria-modal="true" aria-labelledby="dlg-padam-title"
+          style={overlaySty}
+          onClick={() => setPendingDelete(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 16, maxWidth: 420, width: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.18)', overflow: 'hidden',
+            animation: 'slideIn 0.2s ease'
+          }} onClick={e => e.stopPropagation()}>
+            {/* Modal body */}
+            <div style={{ padding: '24px 24px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: '50%', background: '#FEF2F2',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="#B91C1C" strokeWidth={2} strokeLinecap="round">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                    <path d="M10 11v6M14 11v6M9 6V4h6v2"/>
+                  </svg>
+                </div>
+                <div>
+                  <h2 id="dlg-padam-title" style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#0F172A' }}>
+                    Padam Cadangan Tugasan?
+                  </h2>
+                  <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+                    Cadangan tugasan ini akan dibuang daripada senarai draf.
+                    Tindakan ini <strong>tidak boleh diundur</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+            {/* Modal footer */}
+            <div style={{
+              padding: '14px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0',
+              display: 'flex', justifyContent: 'flex-end', gap: 10
+            }}>
+              <button ref={cancelDeleteRef} className="btn btn--secondary"
+                onClick={() => setPendingDelete(null)}>
+                Batal
+              </button>
+              <button className="btn btn--primary" onClick={confirmDeleteProposal}
+                style={{ background: '#B91C1C', borderColor: '#B91C1C' }}>
+                Padam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════
+          MODAL: EDIT TUGASAN PADA PAPAN (DB)
+      ══════════════════════════════════════════════════════════ */}
+      {editingTask && (
+        <div style={overlaySty} onClick={() => setEditingTask(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520,
+            boxShadow: '0 20px 25px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+              background: '#FAFBFD', borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0F172A' }}>Edit Tugasan</h2>
+                <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748B' }}>
+                  📋 {editingTask.order_number || '—'} · {editingTask.client_name || '—'}
+                  {editingTask.approval_status === 'Draft' && (
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700,
+                      background: '#FEF3C7', color: '#92400E', padding: '1px 8px', borderRadius: 10 }}>
+                      Draf
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button onClick={() => setEditingTask(null)}
+                style={{ background: 'none', border: 'none', fontSize: 24, color: '#94A3B8', cursor: 'pointer' }}>
+                ×
+              </button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <div className="form-group" style={{ marginBottom: 16 }}>
+                <label className="form-label">Tugaskan Kepada <span className="required">*</span></label>
+                <select className="form-select" value={editForm.assigned_staff_id}
+                  onChange={e => setEditForm(f => ({ ...f, assigned_staff_id: e.target.value }))}>
+                  <option value="">-- Pilih Staf --</option>
+                  {staffList.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name || s.full_name} ({s.role || s.job_title})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: 16 }}>
+                <label className="form-label">Jenis Tugasan <span className="required">*</span></label>
+                <select className="form-select" value={editForm.task_type}
+                  onChange={e => setEditForm(f => ({ ...f, task_type: e.target.value }))}>
+                  <option value="">-- Pilih Jenis --</option>
+                  {TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: 16 }}>
+                <label className="form-label">Deskripsi</label>
+                <textarea className="form-input" rows={3} value={editForm.description}
+                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Penerangan tugasan..." style={{ resize: 'vertical', minHeight: 72 }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Masa Mula</label>
+                  <input type="datetime-local" className="form-input" value={editForm.start_time}
+                    onChange={e => setEditForm(f => ({ ...f, start_time: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Masa Tamat</label>
+                  <input type="datetime-local" className="form-input" value={editForm.end_time}
+                    min={editForm.start_time || undefined}
+                    onChange={e => setEditForm(f => ({ ...f, end_time: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0',
+              display: 'flex', justifyContent: 'flex-end', gap: 10,
+              background: '#FAFBFD', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
+              <button className="btn btn--secondary" onClick={() => setEditingTask(null)} disabled={isSaving}>
+                Batal
+              </button>
+              <button className="btn btn--primary" onClick={handleEditSave} disabled={isSaving}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 150, justifyContent: 'center' }}>
+                {isSaving ? <><span style={spinSty} /> Menyimpan...</> : <><span>✓</span> Simpan Perubahan</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes spin    { to { transform: rotate(360deg); } }
+        @keyframes slideIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+        .kpi-card--amber { background: linear-gradient(145deg,#78350F 0%,#D97706 55%,#F59E0B 100%); }
+        .kpi-card--amber .kpi-label,
+        .kpi-card--amber .kpi-footer { color: rgba(255,255,255,0.85); }
       `}</style>
     </div>
   );
 }
 
-// ── Gaya Inline ──────────────────────────────────────────────────
-const spinnerStyle = {
+// ── Gaya pembolehubah ─────────────────────────────────────────────
+const actBtn = (bg, color) => ({
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  padding: '4px 10px', borderRadius: 6, border: 'none',
+  background: bg, color, fontSize: 11, fontWeight: 600, cursor: 'pointer'
+});
+
+const spinSty = {
   display: 'inline-block', width: 14, height: 14, flexShrink: 0,
-  border: '2px solid rgba(255,255,255,0.4)',
-  borderTopColor: '#fff', borderRadius: '50%',
-  animation: 'spin 0.7s linear infinite',
+  border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff',
+  borderRadius: '50%', animation: 'spin 0.7s linear infinite',
 };
 
-const columnStyles = {
-  wrapper: {
-    background: '#F8FAFC', borderRadius: 12,
-    border: '1px solid #E8EDF3', overflow: 'hidden',
-  },
-  header: {
-    padding: '12px 14px', background: '#fff',
-    borderBottom: '1px solid #F1F5F9',
-    display: 'flex', alignItems: 'center', gap: 10,
-  },
-};
-
-const taskCardStyles = {
-  wrapper: {
-    background: '#fff', borderRadius: 8, padding: '10px 12px',
-    border: '1px solid #E8EDF3',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-    transition: 'box-shadow 0.15s',
-  },
+const overlaySty = {
+  position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+  backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  zIndex: 1000, padding: 20
 };

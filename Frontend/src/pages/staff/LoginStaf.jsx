@@ -66,7 +66,7 @@ export default function LoginStaf() {
     setError(null);
 
     try {
-      const res = await axios.post('http://localhost:5000/api/login', {
+      const res = await axios.post(`${API_BASE_URL}/api/login`, {
         username: staffId,
         password: password
       });
@@ -81,8 +81,11 @@ export default function LoginStaf() {
           return;
         }
 
+        // Simpan JWT token untuk autentikasi API
+        if (data.token) localStorage.setItem('authToken', data.token);
+
         // Simpan sesi staf menggunakan ID sebenar dari jadual staf dan jadual users
-        localStorage.setItem('staffUser', JSON.stringify({ 
+        localStorage.setItem('staffUser', JSON.stringify({
           id: data.staffId, // ID Staf untuk fetch tugasan, cuti & profil
           userId: data.userId, // ID Users untuk tukar kata laluan
           name: data.name,
