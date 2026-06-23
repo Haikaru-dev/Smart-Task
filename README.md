@@ -245,14 +245,12 @@ SmartTask/
 
 | | |
 |---|---|
-| **Nama** | [NAMA PELAJAR] |
-| **No. Matrik** | [NO MATRIK] |
-| **Universiti** | [NAMA UNIVERSITI] |
-| **Penyelia** | [NAMA PENYELIA] |
-| **Sesi** | [SESI AKADEMIK] |
+| **Nama** | [MUHAMMAD HAIKAL ARIF BIN JOHAN] |
+| **No. Matrik** | [A 203458] |
+| **Universiti** | [UNIVERSITI KEBANGSAAN MALAYSIA] |
+| **Penyelia** | [TS DR RODZIAH LATIH] |
+| **Sesi** | [2025/2026] |
 
 ---
 
-## Lesen
 
-[PERLU DISAHKAN]
