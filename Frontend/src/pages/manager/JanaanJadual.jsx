@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
+import { API_BASE_URL } from '../../config';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const SparkleIcon = () => (
@@ -117,9 +118,13 @@ export default function JanaanJadual() {
   const [proposals, setProposals]           = useState(null);
   const [savingProposal, setSavingProposal] = useState(false);
 
-  // ── State: modal pengesahan padam cadangan ──
+  // ── State: modal pengesahan padam cadangan AI ──
   const [pendingDelete, setPendingDelete] = useState(null);
   const cancelDeleteRef                   = useRef(null);
+
+  // ── State: modal pengesahan generik (buang semua / padam draf papan) ──
+  const [confirmDlg, setConfirmDlg] = useState(null);
+  const cancelConfirmRef            = useRef(null);
 
   // ── State: modal edit tugasan pada papan ──
   const [editingTask, setEditingTask] = useState(null);
@@ -162,18 +167,21 @@ export default function JanaanJadual() {
     const onEsc = (e) => {
       if (e.key !== 'Escape') return;
       if (pendingDelete !== null) setPendingDelete(null);
+      else if (confirmDlg !== null) setConfirmDlg(null);
       else if (editingTask !== null) setEditingTask(null);
     };
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
-  }, [pendingDelete, editingTask]);
+  }, [pendingDelete, confirmDlg, editingTask]);
 
-  // ── Fokus butang "Batal" apabila modal padam dibuka (aksesibiliti) ──
+  // ── Fokus "Batal" apabila modal dibuka (aksesibiliti) ──
   useEffect(() => {
-    if (pendingDelete !== null) {
-      setTimeout(() => cancelDeleteRef.current?.focus(), 20);
-    }
+    if (pendingDelete !== null) setTimeout(() => cancelDeleteRef.current?.focus(), 20);
   }, [pendingDelete]);
+
+  useEffect(() => {
+    if (confirmDlg !== null) setTimeout(() => cancelConfirmRef.current?.focus(), 20);
+  }, [confirmDlg]);
 
   // ────────────────────────────────────────────────────────────────
   // HANDLERS: CADANGAN AI
@@ -302,7 +310,6 @@ export default function JanaanJadual() {
   // ────────────────────────────────────────────────────────────────
 
   const handleConfirmAll = async () => {
-    if (!window.confirm(`Sahkan semua ${draftCount} tugasan draf pada papan?\nStaf akan dapat melihatnya selepas ini.`)) return;
     try {
       setIsConfirming(true);
       const res = await axios.post(`${API_BASE_URL}/api/tasks/confirm`, {});
@@ -346,16 +353,24 @@ export default function JanaanJadual() {
     }
   };
 
-  const handleDeleteDraft = async (taskId, e) => {
+  const handleDeleteDraft = (taskId, e) => {
     e.stopPropagation();
-    if (!window.confirm('Padam draf tugasan ini?\nTugasan akan dikembalikan ke senarai belum diagih.')) return;
-    try {
-      await axios.delete(`${API_BASE_URL}/api/tasks/${taskId}`);
-      showToast('success', 'Draf tugasan berjaya dipadam.');
-      await fetchBoard();
-    } catch (err) {
-      showToast('error', err.response?.data?.error || 'Gagal memadam draf tugasan.');
-    }
+    setConfirmDlg({
+      title:  'Padam Draf Tugasan?',
+      body:   'Tugasan draf ini akan dikembalikan ke senarai belum diagihkan. Staf tidak akan menerima tugasan ini.',
+      danger: true,
+      label:  'Padam Draf',
+      onConfirm: async () => {
+        setConfirmDlg(null);
+        try {
+          await axios.delete(`${API_BASE_URL}/api/tasks/${taskId}`);
+          showToast('success', 'Draf tugasan berjaya dipadam.');
+          await fetchBoard();
+        } catch (err) {
+          showToast('error', err.response?.data?.error || 'Gagal memadam draf tugasan.');
+        }
+      }
+    });
   };
 
   // ── Nilai terbitan ──
@@ -485,7 +500,13 @@ export default function JanaanJadual() {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn btn--secondary"
-                onClick={() => { if (window.confirm('Buang semua cadangan AI ini?')) setProposals(null); }}
+                onClick={() => setConfirmDlg({
+                  title:  'Buang Semua Cadangan?',
+                  body:   'Kesemua cadangan AI akan dibuang. Anda perlu jana semula untuk mendapatkan cadangan baharu.',
+                  danger: true,
+                  label:  'Buang Semua',
+                  onConfirm: () => { setProposals(null); setConfirmDlg(null); }
+                })}
                 disabled={savingProposal}
                 style={{ fontSize: 12, padding: '7px 14px' }}>
                 × Buang Semua
@@ -601,9 +622,7 @@ export default function JanaanJadual() {
                       display: 'flex', alignItems: 'center', gap: 6
                     }}>
                       <WarningIcon />
-                      Staf ini mempunyai cuti separa bertindih. Tetingkap kerja terpadat antara{' '}
-                      {toLocalDatetime(assignedCtx.compressed_window.start).replace('T', ' ')} –{' '}
-                      {toLocalDatetime(assignedCtx.compressed_window.end).replace('T', ' ')}.
+                      {assignedCtx.compressed_window}
                     </div>
                   )}
 
@@ -707,25 +726,12 @@ export default function JanaanJadual() {
 
           {/* Footer seksyen cadangan */}
           <div style={{
-            borderTop: '1px solid #E8EDF3', padding: '16px 24px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            borderTop: '1px solid #E8EDF3', padding: '14px 24px',
             background: '#F8FAFC'
           }}>
             <p style={{ margin: 0, fontSize: 12, color: '#64748B' }}>
-              {proposals.length} cadangan · Staf akan menerima tugasan selepas "Sahkan Semua".
+              {proposals.length} cadangan menunggu pengesahan · Guna butang <strong>"Sahkan Semua"</strong> di atas untuk simpan ke pangkalan data.
             </p>
-            <button className="btn btn--primary" onClick={handleSahkanSemua}
-              disabled={savingProposal || hasTimeError}
-              title={hasTimeError ? 'Betulkan semua ralat masa dahulu' : ''}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, minWidth: 195,
-                justifyContent: 'center', opacity: hasTimeError ? 0.55 : 1,
-                background: '#16A34A', borderColor: '#16A34A'
-              }}>
-              {savingProposal
-                ? <><span style={spinSty} /> Menyimpan...</>
-                : <><span>✓</span> Sahkan Semua ({proposals.length})</>}
-            </button>
           </div>
         </section>
       )}
@@ -936,6 +942,70 @@ export default function JanaanJadual() {
               <button className="btn btn--primary" onClick={confirmDeleteProposal}
                 style={{ background: '#B91C1C', borderColor: '#B91C1C' }}>
                 Padam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════
+          MODAL: PENGESAHAN GENERIK (buang semua / padam draf papan)
+      ══════════════════════════════════════════════════════════ */}
+      {confirmDlg && (
+        <div
+          role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-title"
+          style={overlaySty}
+          onClick={() => setConfirmDlg(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 16, maxWidth: 420, width: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.18)', overflow: 'hidden',
+            animation: 'slideIn 0.2s ease'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '24px 24px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                  background: confirmDlg.danger ? '#FEF2F2' : '#EFF6FF',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {confirmDlg.danger ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                      stroke="#B91C1C" strokeWidth={2} strokeLinecap="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                      stroke="#2563EB" strokeWidth={2} strokeLinecap="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <h2 id="dlg-confirm-title"
+                    style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#0F172A' }}>
+                    {confirmDlg.title}
+                  </h2>
+                  <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+                    {confirmDlg.body}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div style={{
+              padding: '14px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0',
+              display: 'flex', justifyContent: 'flex-end', gap: 10
+            }}>
+              <button ref={cancelConfirmRef} className="btn btn--secondary"
+                onClick={() => setConfirmDlg(null)}>
+                Batal
+              </button>
+              <button className="btn btn--primary" onClick={confirmDlg.onConfirm}
+                style={confirmDlg.danger
+                  ? { background: '#B91C1C', borderColor: '#B91C1C' }
+                  : {}}>
+                {confirmDlg.label || 'Sahkan'}
               </button>
             </div>
           </div>
