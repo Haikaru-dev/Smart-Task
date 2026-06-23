@@ -76,6 +76,10 @@ export default function JanaanJadual() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError]           = useState(null);
   const [toast, setToast]           = useState(null); // { type, text }
+  const [proposals, setProposals]   = useState(null);
+  const [proposalTasks, setProposalTasks] = useState([]);
+  const [staffList, setStaffList]   = useState([]);
+  const [savingProposal, setSavingProposal] = useState(false);
 
   // ── Ambil papan agihan ──
   const fetchBoard = useCallback(async () => {
@@ -92,26 +96,85 @@ export default function JanaanJadual() {
     }
   }, []);
 
-  useEffect(() => { fetchBoard(); }, [fetchBoard]);
+  useEffect(() => {
+    async function fetchStaff() {
+      try {
+        const res = await axios.get('http://localhost:5000/api/staff');
+        setStaffList(res.data);
+      } catch (err) {
+        console.error('Ralat fetchStaff:', err);
+      }
+    }
+    fetchStaff();
+    fetchBoard();
+  }, [fetchBoard]);
 
   // ── Fungsi Jana Agihan (AI) ──
   const handleJanaAgihan = async () => {
     try {
       setIsGenerating(true);
       setToast(null);
+      setProposals(null);
       const res = await axios.post('http://localhost:5000/api/manager/auto-assign');
-      const msg = res.data?.message || 'Agihan AI berjaya dilaksanakan!';
-      alert(msg); // Paparkan notifikasi kejayaan
-      setToast({ type: 'success', text: msg });
-      await fetchBoard(); // refresh jadual
+      if (res.data?.success && res.data?.data) {
+        if (res.data.data.length === 0) {
+          const msg = res.data.message || 'Tiada tugasan baharu untuk diagihkan.';
+          alert(msg);
+          setToast({ type: 'success', text: msg });
+        } else {
+          setProposals(res.data.data);
+          setProposalTasks(res.data.tasks || []);
+          setToast({ type: 'success', text: 'Cadangan agihan tugas berjaya dijana oleh AI!' });
+        }
+      } else {
+        const msg = res.data?.message || 'Tiada tugasan untuk diagihkan.';
+        alert(msg);
+      }
     } catch (err) {
-      const errMsg = err.response?.data?.error || 'Gagal menjana agihan AI. Cuba semula.';
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Gagal menjana agihan AI. Cuba semula.';
       alert(errMsg); // Paparkan mesej ralat
       setToast({ type: 'error', text: errMsg });
     } finally {
       setIsGenerating(false);
-      // Auto-sembunyi toast selepas 5 saat
       setTimeout(() => setToast(null), 5000);
+    }
+  };
+
+  const handleProposalFieldChange = (taskId, field, value) => {
+    setProposals(prev => prev.map(p => {
+      if (p.task_id === taskId) {
+        return { ...p, [field]: value };
+      }
+      return p;
+    }));
+  };
+
+  const handleSaveSchedule = async () => {
+    try {
+      setSavingProposal(true);
+      const res = await axios.post('http://localhost:5000/api/tasks/save-assignments', {
+        assignments: proposals
+      });
+      alert(res.data?.message || 'Jadual tugasan berjaya disimpan!');
+      setToast({ type: 'success', text: res.data?.message || 'Jadual tugasan berjaya disimpan!' });
+      setProposals(null);
+      setProposalTasks([]);
+      await fetchBoard(); // refresh papan Kanban
+    } catch (err) {
+      console.error('Ralat menyimpan jadual:', err);
+      const errMsg = err.response?.data?.error || 'Gagal menyimpan jadual. Cuba semula.';
+      alert(errMsg);
+      setToast({ type: 'error', text: errMsg });
+    } finally {
+      setSavingProposal(false);
+      setTimeout(() => setToast(null), 5000);
+    }
+  };
+
+  const handleCancelProposals = () => {
+    if (window.confirm('Adakah anda pasti mahu membatalkan cadangan agihan AI ini?')) {
+      setProposals(null);
+      setProposalTasks([]);
     }
   };
 
@@ -240,6 +303,206 @@ export default function JanaanJadual() {
         }}>
           ⚠ {error}
         </div>
+      )}
+
+      {/* ── Bahagian Cadangan Agihan AI (Proposals) ── */}
+      {proposals && proposals.length > 0 && (
+        <section className="section-card" style={{ border: '2px dashed #3B82F6', marginBottom: 24 }} aria-label="Cadangan Agihan AI">
+          <header className="section-card-header" style={{ background: '#EFF6FF', borderBottom: '1px solid #BFDBFE' }}>
+            <div className="section-card-title" style={{ color: '#1E40AF' }}>
+              <div className="title-accent-dot" style={{ background: '#3B82F6' }} />
+              Cadangan Agihan Tugasan AI (Belum Disimpan)
+              <span className="badge" style={{ fontSize: 11, marginLeft: 8, background: '#DBEAFE', color: '#1E40AF', padding: '3px 9px', borderRadius: 20 }}>
+                {proposals.length} Cadangan
+              </span>
+            </div>
+            <span className="section-card-meta" style={{ color: '#60A5FA' }}>Sila semak atau ubah suai agihan di bawah sebelum disimpan</span>
+          </header>
+          
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {proposals.map((proposal, index) => {
+                const taskInfo = proposalTasks.find(t => t.task_id === proposal.task_id) || {};
+                
+                // Format helper for datetime-local (expects YYYY-MM-DDTHH:mm)
+                const toLocalDatetime = (isoStr) => {
+                  if (!isoStr) return "";
+                  const date = new Date(isoStr);
+                  const pad = (n) => String(n).padStart(2, '0');
+                  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                };
+
+                const typeBadge = getTypeBadge(taskInfo.task_type);
+
+                return (
+                  <div key={proposal.task_id} style={{ 
+                    background: '#fff', 
+                    border: '1px solid #E2E8F0', 
+                    borderRadius: 12, 
+                    padding: 16,
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12
+                  }}>
+                    {/* Header bar of the proposal card */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
+                          background: typeBadge.bg, color: typeBadge.color,
+                          letterSpacing: '0.3px', textTransform: 'uppercase'
+                        }}>
+                          {taskInfo.task_type || 'Tugasan'}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                          📋 {taskInfo.order_number || 'ORD-??'} · {taskInfo.client_name || 'Pelanggan'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 600 }}>
+                        Due: {taskInfo.due_date ? new Date(taskInfo.due_date).toLocaleDateString('ms-MY') : '—'}
+                      </div>
+                    </div>
+
+                    {/* Task description */}
+                    <p style={{ margin: 0, fontSize: 13, color: '#1E293B', fontWeight: 500 }}>
+                      {taskInfo.description || 'Tiada penerangan disediakan.'}
+                    </p>
+
+                    {/* Specifications if any */}
+                    {taskInfo.specifications && (
+                      <div style={{ fontSize: 11, color: '#64748B', background: '#F8FAFC', padding: '6px 10px', borderRadius: 6, borderLeft: '3px solid #CBD5E1' }}>
+                        <strong>Spesifikasi:</strong> {taskInfo.specifications}
+                      </div>
+                    )}
+
+                    {/* Leave conflicts warning/info */}
+                    {taskInfo.available_staff && taskInfo.available_staff.find(s => s.id === proposal.staff_id)?.compressed_window && (
+                      <div style={{ 
+                        fontSize: 11, 
+                        color: '#B91C1C', 
+                        background: '#FEF2F2', 
+                        padding: '8px 12px', 
+                        borderRadius: 8, 
+                        border: '1px solid #FCA5A5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                      }}>
+                        <span>⚠️</span>
+                        <span>{taskInfo.available_staff.find(s => s.id === proposal.staff_id).compressed_window}</span>
+                      </div>
+                    )}
+
+                    {/* Interactive override controls */}
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                      gap: 12,
+                      marginTop: 4,
+                      paddingTop: 12,
+                      borderTop: '1px solid #F1F5F9'
+                    }}>
+                      {/* Staff dropdown selection */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Tugaskan Kepada:</label>
+                        <select 
+                          value={proposal.staff_id || ""}
+                          onChange={(e) => handleProposalFieldChange(proposal.task_id, 'staff_id', parseInt(e.target.value))}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: '1px solid #CBD5E1',
+                            fontSize: 13,
+                            color: '#1E293B',
+                            background: '#fff'
+                          }}
+                        >
+                          <option value="">-- Pilih Staf --</option>
+                          {staffList.map(s => {
+                            const availContext = taskInfo.available_staff?.find(as => as.id === s.id);
+                            const workload = availContext ? availContext.workload : 0;
+                            const isExcluded = !availContext;
+                            
+                            return (
+                              <option key={s.id} value={s.id} disabled={isExcluded}>
+                                {s.name} ({s.role}) {workload > 0 ? `· ${workload} tugasan aktif` : ""} {isExcluded ? "· (Cuti Penuh)" : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+
+                      {/* Start Time input */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Masa Mula:</label>
+                        <input 
+                          type="datetime-local"
+                          value={toLocalDatetime(proposal.start_time)}
+                          onChange={(e) => handleProposalFieldChange(proposal.task_id, 'start_time', new Date(e.target.value).toISOString())}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: '1px solid #CBD5E1',
+                            fontSize: 13,
+                            color: '#1E293B'
+                          }}
+                        />
+                      </div>
+
+                      {/* End Time input */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Masa Tamat:</label>
+                        <input 
+                          type="datetime-local"
+                          value={toLocalDatetime(proposal.end_time)}
+                          onChange={(e) => handleProposalFieldChange(proposal.task_id, 'end_time', new Date(e.target.value).toISOString())}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: '1px solid #CBD5E1',
+                            fontSize: 13,
+                            color: '#1E293B'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Action buttons for saving or cancelling proposals */}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24, paddingTop: 16, borderTop: '1px solid #BFDBFE' }}>
+              <button 
+                className="btn btn--secondary" 
+                onClick={handleCancelProposals}
+                disabled={savingProposal}
+                style={{ padding: '10px 20px' }}
+              >
+                Batal
+              </button>
+              <button 
+                className="btn btn--primary" 
+                onClick={handleSaveSchedule}
+                disabled={savingProposal}
+                style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 160, justifyContent: 'center' }}
+              >
+                {savingProposal ? (
+                  <>
+                    <span style={spinnerStyle} />
+                    Menyimpan Jadual...
+                  </>
+                ) : (
+                  <>
+                    <span>✓</span>
+                    Simpan Jadual
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
       )}
 
       {/* ── Papan Agihan ── */}

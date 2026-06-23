@@ -1,11 +1,9 @@
 // src/pages/SenaraiStaf.jsx
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 
 export default function SenaraiStaf() {
-  const navigate = useNavigate();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,6 +12,10 @@ export default function SenaraiStaf() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({ name: '', role: '', status: 'Aktif' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // State untuk Panel Detail Staf
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // Ambil Data Staf
   async function fetchStaff() {
@@ -33,6 +35,20 @@ export default function SenaraiStaf() {
   useEffect(() => {
     fetchStaff();
   }, []);
+
+  // Buka panel detail staf
+  const handleUserCellClick = async (staffId) => {
+    setDetailLoading(true);
+    setSelectedStaff(null);
+    try {
+      const res = await axios.get(`http://localhost:5000/api/staff/${staffId}`);
+      setSelectedStaff(res.data.data || res.data);
+    } catch (err) {
+      console.error('Ralat mengambil profil staf:', err);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   // Uruskan perubahan input borang
   const handleChange = (e) => {
@@ -110,28 +126,30 @@ export default function SenaraiStaf() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>ID Staf</th>
                 <th>Nama Staf</th>
                 <th>Peranan / Fokus</th>
                 <th>Status</th>
-                <th style={{ textAlign: 'center' }}>Tindakan</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>Memuatkan data...</td>
+                  <td colSpan={3} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>Memuatkan data...</td>
                 </tr>
               ) : staff.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>Tiada staf direkodkan.</td>
+                  <td colSpan={3} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>Tiada staf direkodkan.</td>
                 </tr>
               ) : (
                 staff.map((s) => (
                   <tr key={s.id}>
-                    <td><span className="td-id">#{s.id}</span></td>
                     <td>
-                      <div className="user-cell">
+                      <div
+                        className="user-cell"
+                        onClick={() => handleUserCellClick(s.id)}
+                        style={{ cursor: 'pointer' }}
+                        title="Lihat detail staf"
+                      >
                         <div className="user-initials-circle">
                           {s.name.substring(0, 2).toUpperCase()}
                         </div>
@@ -144,15 +162,6 @@ export default function SenaraiStaf() {
                         {s.status}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button 
-                        className="btn btn--secondary btn--sm"
-                        onClick={() => navigate(`/staf/${s.id}`)}
-                        style={{ fontSize: '11.5px', padding: '5px 12px' }}
-                      >
-                        Detail
-                      </button>
-                    </td>
                   </tr>
                 ))
               )}
@@ -160,6 +169,61 @@ export default function SenaraiStaf() {
           </table>
         </div>
       </section>
+
+      {/* ── Panel Detail Staf ── */}
+      {(detailLoading || selectedStaff) && (
+        <div style={modalStyles.overlay} onClick={() => setSelectedStaff(null)}>
+          <div style={detailPanelStyles.panel} onClick={(e) => e.stopPropagation()}>
+            <div style={modalStyles.header}>
+              <h2 style={modalStyles.title}>Profil Kakitangan</h2>
+              <button style={modalStyles.closeBtn} onClick={() => setSelectedStaff(null)}>×</button>
+            </div>
+
+            {detailLoading ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#94A3B8' }}>Memuatkan profil...</div>
+            ) : selectedStaff && (
+              <div style={modalStyles.body}>
+                {/* Avatar + nama */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
+                  <div style={detailPanelStyles.avatar}>
+                    {selectedStaff.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <h3 style={{ margin: '12px 0 4px', fontSize: '18px', fontWeight: '700', color: '#0F172A' }}>
+                    {selectedStaff.name}
+                  </h3>
+                  <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
+                    ID: ST-{String(selectedStaff.id).padStart(3, '0')}
+                  </p>
+                  <span className="badge badge--info" style={{ padding: '5px 14px', fontSize: '12px' }}>
+                    {selectedStaff.role || 'Tiada Peranan'}
+                  </span>
+                </div>
+
+                {/* Info grid */}
+                <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  {[
+                    { label: 'Nama Penuh',       value: selectedStaff.name },
+                    { label: 'Peranan / Jawatan', value: selectedStaff.role || '-' },
+                    { label: 'Emel Rasmi',        value: selectedStaff.email || '-' },
+                    { label: 'No. Telefon',       value: selectedStaff.phone_number || '-' },
+                    { label: 'Status Pekerja',    value: null, badge: selectedStaff.status },
+                    { label: 'ID Sistem',         value: `#${selectedStaff.id}` },
+                  ].map(({ label, value, badge }) => (
+                    <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={detailPanelStyles.infoLabel}>{label}</span>
+                      {badge ? (
+                        <span className={`badge ${badge === 'Aktif' ? 'badge--success' : 'badge--danger'}`} style={{ width: 'fit-content' }}>{badge}</span>
+                      ) : (
+                        <span style={detailPanelStyles.infoValue}>{value}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Modal Tambah Staf ── */}
       {isModalOpen && (
@@ -233,6 +297,25 @@ export default function SenaraiStaf() {
     </div>
   );
 }
+
+// ── Gaya Panel Detail Staf ──
+const detailPanelStyles = {
+  panel: {
+    backgroundColor: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '520px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column',
+    maxHeight: '90vh', overflowY: 'auto'
+  },
+  avatar: {
+    width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#E2E8F0',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: '26px', fontWeight: 'bold', color: '#475569'
+  },
+  infoLabel: {
+    fontSize: '11px', fontWeight: '600', color: '#64748B',
+    textTransform: 'uppercase', letterSpacing: '0.5px'
+  },
+  infoValue: { fontSize: '14px', color: '#1E293B', fontWeight: '500' }
+};
 
 // ── Gaya Modal (Inline) ──
 const modalStyles = {

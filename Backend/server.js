@@ -445,77 +445,299 @@ app.get('/api/tasks/board', async (req, res) => {
     }
 });
 
-// 3. Endpoint untuk agihan tugasan menggunakan Gemini AI
+// 3. Endpoint untuk agihan tugasan menggunakan Gemini AI (Function Calling & Proposal Mode)
 app.post('/api/manager/auto-assign', async (req, res) => {
     try {
-        // A. Dapatkan semua tugasan yang belum diagih
-        const [tasks] = await db.query(
-            `SELECT * FROM tasks WHERE assigned_staff_id IS NULL`
+        // A. Ambil semua Orders yang berstatus 'Pending' atau 'In Progress'
+        const [activeOrders] = await db.query(
+            `SELECT id FROM orders WHERE status IN ('Pending', 'In Progress')`
         );
 
+        if (activeOrders.length === 0) {
+            return res.status(200).json({ 
+                success: true, 
+                message: "Tiada tempahan berstatus 'Pending' atau 'In Progress' untuk diagihkan.", 
+                assignments: [] 
+            });
+        }
+
+        const activeOrderIds = activeOrders.map(o => o.id);
+
+        // B. Dapatkan semua tugasan yang belum diagih bagi tempahan aktif tersebut
+        const [tasks] = await db.query(`
+            SELECT tasks.*, 
+                   orders.order_number, orders.client_name, orders.item_type, 
+                   orders.quantity, orders.due_date, orders.delivery_location, 
+                   orders.delivery_type, orders.specifications
+            FROM tasks
+            JOIN orders ON tasks.order_id = orders.id
+            WHERE tasks.assigned_staff_id IS NULL 
+              AND tasks.order_id IN (?)
+        `, [activeOrderIds]);
+
         if (tasks.length === 0) {
-            return res.status(200).json({ message: "Tiada tugasan yang perlu diagihkan." });
+            return res.status(200).json({ 
+                success: true, 
+                message: "Tiada tugasan baharu yang perlu diagihkan.", 
+                assignments: [] 
+            });
         }
 
-        // B. Dapatkan staf yang aktif dan tidak cuti (Lulus) hari ini, beserta beban kerja
-        const today = new Date().toISOString().slice(0, 10);
-        const [staffList] = await db.query(`
-            SELECT staff.*, 
-                   (SELECT COUNT(*) FROM tasks WHERE tasks.assigned_staff_id = staff.id AND status IN ('In Progress', 'Pending')) AS workload
-            FROM staff
-            WHERE staff.status = 'Aktif'
-            AND staff.id NOT IN (
-                SELECT staff_id FROM leaves
-                WHERE status = 'Approved'
-                AND start_date <= ? AND end_date >= ?
-            )
-        `, [today, today]);
+        // C. Dapatkan senarai staf yang aktif
+        const [staffRows] = await db.query(
+            `SELECT id, full_name, job_title, status FROM staff WHERE status = 'Aktif'`
+        );
 
-        if (staffList.length === 0) {
-            return res.status(400).json({ error: "Tiada staf yang tersedia hari ini!" });
+        if (staffRows.length === 0) {
+            return res.status(400).json({ error: "Tiada staf yang aktif dalam sistem!" });
         }
 
-        // C. Integrasi Gemini AI
+        // D. Ambil beban kerja semasa (workload) bagi setiap staf
+        const [workloads] = await db.query(`
+            SELECT assigned_staff_id, COUNT(*) AS count 
+            FROM tasks 
+            WHERE status IN ('Pending', 'In Progress') 
+              AND assigned_staff_id IS NOT NULL
+            GROUP BY assigned_staff_id
+        `);
+        const workloadMap = {};
+        workloads.forEach(w => {
+            workloadMap[w.assigned_staff_id] = w.count;
+        });
+
+        // E. Ambil rekod cuti yang diluluskan (leaves.status = 'Approved')
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const [leaveRows] = await db.query(`
+            SELECT * FROM leaves 
+            WHERE status = 'Approved' AND end_date >= ?
+        `, [todayStr]);
+
+        // F. Bina data terstruktur dengan filter SQL/JS dan pengesanan Compressed Window
+        function getLeaveStatusForTask(staffId, dueDateStr, leavesList, todayDateStr) {
+            const today = new Date(todayDateStr);
+            const dueDate = new Date(dueDateStr);
+            const staffLeaves = leavesList.filter(l => l.staff_id === staffId);
+            
+            let isFullyOnLeave = false;
+            let compressedWindowMessage = null;
+            
+            for (const leave of staffLeaves) {
+                const leaveStart = new Date(leave.start_date);
+                const leaveEnd = new Date(leave.end_date);
+                
+                const overlapStart = new Date(Math.max(today, leaveStart));
+                const overlapEnd = new Date(Math.min(dueDate, leaveEnd));
+                
+                if (overlapStart <= overlapEnd) {
+                    const totalPeriodDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)) + 1;
+                    const overlapDays = Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
+                    
+                    if (overlapDays >= totalPeriodDays) {
+                        isFullyOnLeave = true;
+                        break;
+                    } else {
+                        const startStr = leave.start_date instanceof Date ? leave.start_date.toISOString().slice(0, 10) : new String(leave.start_date).slice(0, 10);
+                        const endStr = leave.end_date instanceof Date ? leave.end_date.toISOString().slice(0, 10) : new String(leave.end_date).slice(0, 10);
+                        compressedWindowMessage = `Staf bercuti dari ${startStr} hingga ${endStr} (bertindih dengan tempoh tugasan). Tempoh kerja efektif menjadi lebih singkat. Sila awalkan tugasan atau agihkan ke staf lain jika perlu.`;
+                    }
+                }
+            }
+            return { isFullyOnLeave, compressedWindowMessage };
+        }
+
+        const tasksForAI = tasks.map(task => {
+            const dueDateStr = task.due_date instanceof Date ? task.due_date.toISOString().slice(0, 10) : new String(task.due_date).slice(0, 10);
+            const availableStaff = [];
+            
+            for (const s of staffRows) {
+                const { isFullyOnLeave, compressedWindowMessage } = getLeaveStatusForTask(s.id, dueDateStr, leaveRows, todayStr);
+                if (!isFullyOnLeave) {
+                    availableStaff.push({
+                        id: s.id,
+                        full_name: s.full_name,
+                        job_title: s.job_title,
+                        workload: workloadMap[s.id] || 0,
+                        compressed_window: compressedWindowMessage
+                    });
+                }
+            }
+            
+            return {
+                task_id: task.id,
+                task_type: task.task_type,
+                description: task.description,
+                order_number: task.order_number,
+                client_name: task.client_name,
+                item_type: task.item_type,
+                quantity: task.quantity,
+                due_date: dueDateStr,
+                delivery_location: task.delivery_location,
+                delivery_type: task.delivery_type,
+                specifications: task.specifications,
+                available_staff: availableStaff
+            };
+        });
+
+        // G. Integrasi Gemini AI menggunakan Function Calling
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash",
-            generationConfig: {
-                responseMimeType: "application/json",
+            tools: [
+                {
+                    functionDeclarations: [
+                        {
+                            name: "assign_tasks",
+                            description: "Assigns unassigned tasks to available staff members, scheduling their start and end times optimally.",
+                            parameters: {
+                                type: "OBJECT",
+                                properties: {
+                                    assignments: {
+                                        type: "ARRAY",
+                                        description: "The list of optimal task assignments.",
+                                        items: {
+                                            type: "OBJECT",
+                                            properties: {
+                                                task_id: { type: "INTEGER", description: "The ID of the task being assigned." },
+                                                staff_id: { type: "INTEGER", description: "The ID of the staff member assigned to the task." },
+                                                start_time: { type: "STRING", description: "ISO 8601 datetime string representing when the task starts." },
+                                                end_time: { type: "STRING", description: "ISO 8601 datetime string representing when the task ends." }
+                                            },
+                                            required: ["task_id", "staff_id", "start_time", "end_time"]
+                                        }
+                                    }
+                                },
+                                required: ["assignments"]
+                            }
+                        }
+                    ]
+                }
+            ],
+            toolConfig: {
+                functionCallingConfig: {
+                    mode: "ANY",
+                    allowedFunctionNames: ["assign_tasks"]
+                }
             }
         });
 
-        const prompt = `Anda adalah sistem agihan tugasan pintar. Berikut adalah senarai tugasan belum diagih: ${JSON.stringify(tasks)}. Berikut adalah staf yang hadir hari ini berserta beban kerja mereka: ${JSON.stringify(staffList)}. Tolong agihkan tugasan secara adil. Wajib pulangkan jawapan dalam format JSON Array seperti ini sahaja: [{"task_id": 1, "staff_id": 2}]. Jangan letak teks Markdown.`;
+        const prompt = `Anda adalah AI penjadualan pintar untuk syarikat percetakan SH Design & Print Sdn. Bhd.
+Tugas anda adalah untuk mengagihkan tugasan berikut kepada staf yang paling sesuai dengan memanggil fungsi 'assign_tasks'.
 
-        const resultAI = await model.generateContent(prompt);
-        const responseText = resultAI.response.text();
-        
-        // D. Parse JSON dari AI
-        let assignments = [];
-        try {
-            assignments = JSON.parse(responseText);
-        } catch (e) {
-            return res.status(500).json({ error: "Gagal memproses respon AI", details: responseText });
+Berikut adalah tugasan belum diagih berserta staf yang tersedia:
+${JSON.stringify(tasksForAI, null, 2)}
+
+Sila patuhi kriteria berikut:
+1. Padanan Kemahiran (Skill Matching):
+   - 'Design' -> 'Designer'
+   - 'Printing' -> 'Operator Digital' atau 'Operator Mesin (Banner/Bunting)'
+   - 'Packing' / 'Delivery' -> 'Finishing' atau Operator
+2. Keutamaan Tarikh (Deadline Urgency): Dahulukan tugasan yang tarikh akhirnya (due_date) lebih dekat.
+3. Anggaran Masa (Duration Estimation):
+   - Design: 4-8 jam (bergantung kepada maklum balas pelanggan / customer consultation dependency).
+   - Printing/Packing: 1 jam bagi setiap 100 unit (minimum 1 jam).
+4. Pengesanan Konflik Cuti (Compressed Window):
+   - Jika staf mempunyai 'compressed_window', jadualkan tugasan staf tersebut ke tarikh LEBIH AWAL (pre-leave) atau agihkan tugasan tersebut kepada staf lain yang tersedia.
+5. Masa Bekerja: Jadualkan tugas pada waktu pejabat biasa (09:00 - 18:00) bermula dari ${todayStr}.
+
+Panggil fungsi 'assign_tasks' dengan jawapan anda.`;
+
+        // Uji dengan cubaan semula (retry) jika mendapat ralat pelayan
+        let resultAI;
+        let attempts = 0;
+        const maxAttempts = 3;
+        while (attempts < maxAttempts) {
+            try {
+                resultAI = await model.generateContent(prompt);
+                break;
+            } catch (err) {
+                attempts++;
+                console.warn(`Gemini API Call attempt ${attempts} failed: ${err.message}`);
+                if (attempts >= maxAttempts) throw err;
+                await new Promise(resolve => setTimeout(resolve, attempts * 1000));
+            }
         }
 
-        // E. Kemaskini Pangkalan Data
-        const updatePromises = assignments.map(assign => {
-            return db.query(
-                `UPDATE tasks SET assigned_staff_id = ? WHERE id = ?`,
-                [assign.staff_id, assign.task_id]
-            );
-        });
+        // H. Ekstrak cadangan daripada calls
+        let assignments = [];
+        try {
+            const calls = (typeof resultAI.response.functionCalls === 'function') ? resultAI.response.functionCalls() : null;
+            if (calls && calls.length > 0) {
+                assignments = calls[0].args.assignments || [];
+            } else {
+                // Fallback
+                const candidate = resultAI.response.candidates?.[0];
+                const part = candidate?.content?.parts?.[0];
+                if (part?.functionCall?.args?.assignments) {
+                    assignments = part.functionCall.args.assignments;
+                } else {
+                    const text = resultAI.response.text();
+                    const parsed = JSON.parse(text);
+                    assignments = Array.isArray(parsed) ? parsed : (parsed.assignments || []);
+                }
+            }
+        } catch (e) {
+            console.warn("Ralat semasa mengekstrak cadangan AI:", e.message);
+        }
 
-        await Promise.all(updatePromises);
-
-        // F. Pulangkan respon
+        // Pulangkan respons sebagai cadangan kepada UI (Bukan terus simpan ke pangkalan data)
         res.status(200).json({ 
-            message: "Agihan AI berjaya dilaksanakan!", 
-            data: assignments 
+            success: true,
+            message: "Cadangan agihan tugas berjaya dijana oleh AI!", 
+            data: assignments,
+            tasks: tasksForAI
         });
 
     } catch (err) {
         console.error("Ralat auto-assign Gemini:", err);
-        res.status(500).json({ error: "Ralat semasa mengagih tugasan dengan AI." });
+        res.status(500).json({ error: "Ralat semasa mengagih tugasan dengan AI.", detail: err.message });
+    }
+});
+
+// Endpoint baharu untuk menyimpan agihan tugasan yang disahkan oleh admin
+app.post('/api/tasks/save-assignments', async (req, res) => {
+    const { assignments } = req.body;
+
+    if (!assignments || !Array.isArray(assignments)) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Format data tidak sah. Perlu menghantar senarai assignments." 
+        });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        for (const assign of assignments) {
+            const { task_id, staff_id, start_time, end_time } = assign;
+
+            const formattedStart = start_time ? new Date(start_time).toISOString().slice(0, 19).replace('T', ' ') : null;
+            const formattedEnd = end_time ? new Date(end_time).toISOString().slice(0, 19).replace('T', ' ') : null;
+
+            await connection.query(
+                `UPDATE tasks 
+                 SET assigned_staff_id = ?, start_time = ?, end_time = ?, status = 'Pending' 
+                 WHERE id = ?`,
+                [staff_id, formattedStart, formattedEnd, task_id]
+            );
+        }
+
+        await connection.commit();
+        res.status(200).json({ 
+            success: true, 
+            message: "Jadual tugasan berjaya disimpan!" 
+        });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("Ralat menyimpan agihan tugasan:", error);
+        res.status(500).json({ 
+            success: false, 
+            error: "Gagal menyimpan jadual.", 
+            detail: error.message 
+        });
+    } finally {
+        connection.release();
     }
 });
 
