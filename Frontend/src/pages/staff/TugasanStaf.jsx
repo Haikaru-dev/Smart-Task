@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
+import { API_BASE_URL } from '../../config';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const FolderIcon = () => (

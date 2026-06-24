@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import '../../smarttask.css';
+import { API_BASE_URL } from '../../config';
 
 // ── Ikon ─────────────────────────────────────────────────────────
 const UserIcon = () => (

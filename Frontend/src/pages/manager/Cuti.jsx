@@ -1,6 +1,7 @@
 // src/pages/Cuti.jsx
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../../config';
 
 // ── Helper: format tarikh DD/MM/YYYY ──
 function formatDate(dateStr) {

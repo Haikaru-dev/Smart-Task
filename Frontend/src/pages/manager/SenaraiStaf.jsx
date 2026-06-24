@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
+import { API_BASE_URL } from '../../config';
 
 export default function SenaraiStaf() {
   const [staff, setStaff] = useState([]);
