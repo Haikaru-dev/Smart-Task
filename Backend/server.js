@@ -110,7 +110,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Endpoint untuk menambah tempahan baharu
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', verifyToken, requireRole('Manager'), async (req, res) => {
     console.log("Data diterima:", req.body);
 
     // 1. Tangkap semua data dari Frontend
@@ -152,7 +152,7 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // Endpoint untuk mendapatkan semua senarai tempahan
-app.get('/api/orders', async (req, res) => {
+app.get('/api/orders', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // Susun data dari yang paling baharu (id paling besar) ke paling lama
         const sql = `SELECT * FROM Orders ORDER BY id DESC`;
@@ -243,7 +243,7 @@ app.get('/api/dashboard/audit-logs', verifyToken, requireRole('Manager'), async 
 // ── STAFF ENDPOINTS ──────────────────────────────────────────────
 
 // Endpoint untuk mendapatkan senarai staf
-app.get('/api/staff', async (req, res) => {
+app.get('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const sql = `SELECT id, full_name AS name, job_title AS role, status FROM staff ORDER BY full_name ASC`;
         const [results] = await db.query(sql);
@@ -255,7 +255,7 @@ app.get('/api/staff', async (req, res) => {
 });
 
 // Endpoint untuk tambah staf baharu
-app.post('/api/staff', async (req, res) => {
+app.post('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const { name, role, status } = req.body;
         const sql = `INSERT INTO staff (full_name, job_title, status) VALUES (?, ?, ?)`;
@@ -268,7 +268,7 @@ app.post('/api/staff', async (req, res) => {
 });
 
 // Endpoint untuk mendapatkan detail SATU staf berdasarkan ID
-app.get('/api/staff/:id', async (req, res) => {
+app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staffId = req.params.id;
         const sql = `SELECT id, full_name AS name, job_title AS role, status, email, phone_number FROM staff WHERE id = ?`;
@@ -284,7 +284,7 @@ app.get('/api/staff/:id', async (req, res) => {
 });
 
 // Endpoint untuk mendapatkan semua rekod cuti
-app.get('/api/leaves', async (req, res) => {
+app.get('/api/leaves', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const sql = `
             SELECT leaves.*, staff.full_name AS staff_name 
@@ -300,7 +300,7 @@ app.get('/api/leaves', async (req, res) => {
 });
 
 // Endpoint untuk merekod cuti baharu
-app.post('/api/leaves', async (req, res) => {
+app.post('/api/leaves', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const { staff_id, start_date, end_date, reason } = req.body;
         const sql = `INSERT INTO Leaves (staff_id, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, 'Pending')`;
