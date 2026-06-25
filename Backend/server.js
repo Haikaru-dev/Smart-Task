@@ -381,21 +381,35 @@ app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (r
         }
 
         // C. ALGORITMA AGIHAN PINTAR: Round-Robin / Load Balancing
-        const updatePromises = tasks.map((task, index) => {
-            const assignedStaff = staffList[index % staffList.length];
-            return db.query(
-                `UPDATE tasks SET assigned_staff_id = ? WHERE id = ?`,
-                [assignedStaff.id, task.id]
-            );
-        });
+        const assignments = tasks.map((task, index) => ({
+            taskId: task.id,
+            staffId: staffList[index % staffList.length].id
+        }));
 
-        // D. Jalankan semua kemaskini serentak
-        await Promise.all(updatePromises);
+        // D. Jalankan semua kemaskini dalam satu transaksi
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
 
-        res.status(200).json({
-            message: `Berjaya! Sistem telah mengagihkan ${tasks.length} tugasan baharu.`,
-            assignedCount: tasks.length
-        });
+            for (const { taskId, staffId } of assignments) {
+                await connection.query(
+                    `UPDATE tasks SET assigned_staff_id = ? WHERE id = ?`,
+                    [staffId, taskId]
+                );
+            }
+
+            await connection.commit();
+            res.status(200).json({
+                message: `Berjaya! Sistem telah mengagihkan ${tasks.length} tugasan baharu.`,
+                assignedCount: tasks.length
+            });
+
+        } catch (txErr) {
+            await connection.rollback();
+            throw txErr;
+        } finally {
+            connection.release();
+        }
 
     } catch (err) {
         console.error("Ralat generate-schedule:", err);
