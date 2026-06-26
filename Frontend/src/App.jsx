@@ -18,7 +18,6 @@ import JanaanJadual from './pages/manager/JanaanJadual';
 import SenaraiStaf from './pages/manager/SenaraiStaf';
 import DetailStaf from './pages/manager/DetailStaf';
 import Cuti from './pages/manager/Cuti';
-import PengurusanCuti from './pages/manager/PengurusanCuti';
 import ProfilAdmin from './pages/manager/ProfilAdmin';
 
 // Portal Staf
@@ -77,7 +76,6 @@ export default function App() {
           <Route path="/staf" element={<SenaraiStaf />} />
           <Route path="/staf/:id" element={<DetailStaf />} />
           <Route path="/cuti" element={<Cuti />} />
-          <Route path="/pengurusan-cuti" element={<PengurusanCuti />} />
           <Route path="/profil" element={<ProfilAdmin />} />
         </Route>
 

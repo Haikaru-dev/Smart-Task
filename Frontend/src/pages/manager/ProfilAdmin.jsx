@@ -68,6 +68,7 @@ export default function ProfilAdmin() {
   // ── Form State ──
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
@@ -105,6 +106,11 @@ export default function ProfilAdmin() {
     
     // Validasi kata laluan (jika diisi)
     if (newPassword) {
+      if (!currentPassword) {
+        setToast({ type: 'error', text: 'Kata laluan semasa diperlukan untuk menukar kata laluan.' });
+        setSaving(false);
+        return;
+      }
       if (newPassword.length < 6) {
         setToast({ type: 'error', text: 'Kata laluan baharu mestilah sekurang-kurangnya 6 aksara.' });
         setSaving(false);
@@ -118,28 +124,29 @@ export default function ProfilAdmin() {
     }
 
     try {
-      await axios.put(`${API_BASE_URL}/api/admin/update/${userId}`, {
-        name,
-        email,
-        password: newPassword || undefined
-      });
-      
-      // Update local storage user data info (sekiranya nama diubah)
+      // Kemaskini nama & emel
+      await axios.put(`${API_BASE_URL}/api/admin/update/${userId}`, { name, email });
+
+      // Tukar kata laluan secara berasingan (jika diisi)
+      if (newPassword) {
+        await axios.put(`${API_BASE_URL}/api/staff/change-password/${userId}`, {
+          currentPassword,
+          newPassword,
+        });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+
+      // Kemaskini localStorage supaya nama paparan ikut terkini
       if (sysUser) {
         sysUser.username = name;
         localStorage.setItem('user', JSON.stringify(sysUser));
       }
 
       setToast({ type: 'success', text: '✓ Profil berjaya dikemaskini!' });
-      
-      // Update local profile state
       setProfile(prev => ({ ...prev, name, email }));
-      
-      if (newPassword) {
-        setNewPassword('');
-        setConfirmPassword('');
-      }
-      
+
     } catch (err) {
       const msg = err.response?.data?.error || 'Gagal menyimpan perubahan. Sila cuba lagi.';
       setToast({ type: 'error', text: msg });
@@ -306,6 +313,22 @@ export default function ProfilAdmin() {
             </p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 400 }}>
+              {/* Kata Laluan Semasa */}
+              <div style={F.group}>
+                <label style={F.label}>Kata Laluan Semasa</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={F.iconLeft}><LockIcon /></span>
+                  <input
+                    type={showPass ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Diperlukan untuk menukar kata laluan"
+                    style={F.input}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+
               {/* Kata Laluan Baru */}
               <div style={F.group}>
                 <label style={F.label}>Kata Laluan Baru</label>

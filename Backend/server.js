@@ -4,6 +4,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const db = require('./db');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { verifyToken, requireRole } = require('./middleware/auth');
@@ -17,6 +20,48 @@ const PORT = process.env.PORT || 5000;
 // Tetapan Middleware
 app.use(cors()); // Membenarkan permintaan Cross-Origin
 app.use(express.json()); // Parsing body berformat JSON
+
+// ── Static serving: fail lampiran tugasan (baca sahaja, tiada directory listing) ──
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { index: false }));
+
+// ── Konfigurasi multer untuk muat naik lampiran tugasan ──
+const uploadDir = path.join(__dirname, 'uploads', 'tasks');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const taskStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => {
+        const taskId = req.params.id || 'unknown';
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, `task-${taskId}-${Date.now()}${ext}`);
+    }
+});
+
+const taskUpload = multer({
+    storage: taskStorage,
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Jenis fail tidak dibenarkan. Hanya JPG, PNG, dan PDF diterima.'));
+        }
+    },
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+// Pembungkus multer yang mengembalikan error JSON (bukan HTML)
+function uploadSingle(field) {
+    return (req, res, next) => {
+        taskUpload.single(field)(req, res, (err) => {
+            if (!err) return next();
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? 'Fail terlalu besar. Had maksimum ialah 5MB.'
+                : (err.message || 'Ralat muat naik fail.');
+            res.status(400).json({ error: msg });
+        });
+    };
+}
 
 // ── Endpoint Log Masuk Berpusat (Unified Login) ──────────────────
 app.post('/api/login', async (req, res) => {
@@ -1094,18 +1139,19 @@ app.put('/api/staff/change-password/:userId', verifyToken, requireRole('Staff', 
             return res.status(400).json({ error: "Kata laluan baharu mestilah sekurang-kurangnya 6 aksara." });
         }
 
-        // Semak kata laluan semasa (jika dihantar) sebelum tukar
-        if (currentPassword) {
-            const [users] = await db.query(
-                `SELECT password FROM users WHERE id = ?`, [userId]
-            );
-            if (users.length === 0) {
-                return res.status(404).json({ error: "Pengguna tidak dijumpai." });
-            }
-            const isMatch = await bcrypt.compare(currentPassword, users[0].password);
-            if (!isMatch) {
-                return res.status(401).json({ error: "Kata laluan semasa tidak tepat." });
-            }
+                // Kata laluan semasa WAJIB dihantar sebelum menukar kata laluan
+        if (!currentPassword) {
+            return res.status(400).json({ error: "Kata laluan semasa diperlukan untuk menukar kata laluan." });
+        }
+        const [users] = await db.query(
+            `SELECT password FROM users WHERE id = ?`, [userId]
+        );
+        if (users.length === 0) {
+            return res.status(404).json({ error: "Pengguna tidak dijumpai." });
+        }
+        const isMatch = await bcrypt.compare(currentPassword, users[0].password);
+        if (!isMatch) {
+            return res.status(401).json({ error: "Kata laluan semasa tidak tepat." });
         }
 
         // Hash kata laluan baharu sebelum simpan (WAJIB)
@@ -1147,29 +1193,17 @@ app.get('/api/admin/profile/:userId', verifyToken, requireRole('Manager'), async
     }
 });
 
-// 2. Endpoint untuk mengemaskini profil & kata laluan Admin
+// 2. Endpoint untuk mengemaskini profil Admin (nama & emel sahaja)
+// Penukaran kata laluan dikendalikan oleh PUT /api/staff/change-password/:userId
 app.put('/api/admin/update/:userId', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const userId = req.params.userId;
-        const { name, email, password } = req.body;
+        const { name, email } = req.body;
 
-        if (password) {
-            // Jika admin mahu tukar kata laluan sekali, hash kata laluan baru
-            if (password.length < 6) {
-                return res.status(400).json({ error: "Kata laluan baharu mestilah sekurang-kurangnya 6 aksara." });
-            }
-            const hashedPassword = await bcrypt.hash(password, 10);
-            await db.query(
-                "UPDATE users SET name = ?, email = ?, password = ? WHERE id = ?",
-                [name || null, email || null, hashedPassword, userId]
-            );
-        } else {
-            // Hanya kemaskini nama dan emel
-            await db.query(
-                "UPDATE users SET name = ?, email = ? WHERE id = ?",
-                [name || null, email || null, userId]
-            );
-        }
+        await db.query(
+            "UPDATE users SET name = ?, email = ? WHERE id = ?",
+            [name || null, email || null, userId]
+        );
 
         res.status(200).json({ message: "Profil Admin berjaya dikemaskini!" });
     } catch (err) {
@@ -1179,7 +1213,7 @@ app.put('/api/admin/update/:userId', verifyToken, requireRole('Manager'), async 
 });
 
 // Kemaskini status tugasan (Staff: tugasan sendiri sahaja; Manager: mana-mana tugasan)
-app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
+app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'), uploadSingle('file'), async (req, res) => {
     try {
         const taskId = parseInt(req.params.id, 10);
         const { status } = req.body;
@@ -1191,24 +1225,35 @@ app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'),
             });
         }
 
-        if (req.user.role === 'Staff') {
-            const [[task]] = await db.query(
-                `SELECT assigned_staff_id FROM tasks WHERE id = ? AND approval_status = 'Confirmed'`,
-                [taskId]
-            );
-            if (!task) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
-            if (String(task.assigned_staff_id) !== String(req.user.staffId)) {
-                return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh kemaskini tugasan sendiri.' });
-            }
+        // Dapatkan task beserta order_id dan semak pemilikan (Staff)
+        const [[task]] = await db.query(
+            `SELECT assigned_staff_id, order_id FROM tasks WHERE id = ? AND approval_status = 'Confirmed'`,
+            [taskId]
+        );
+        if (!task) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
+
+        if (req.user.role === 'Staff' && String(task.assigned_staff_id) !== String(req.user.staffId)) {
+            return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh kemaskini tugasan sendiri.' });
         }
 
-        const [result] = await db.query(
-            `UPDATE tasks SET status = ? WHERE id = ?`,
-            [status, taskId]
-        );
-        if (result.affectedRows === 0) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
+        // Kemaskini status — sertakan attachment_path hanya jika fail baharu dimuatnaik
+        let attachmentPath = null;
+        if (req.file) {
+            attachmentPath = `/uploads/tasks/${req.file.filename}`;
+            await db.query(
+                `UPDATE tasks SET status = ?, attachment_path = ? WHERE id = ?`,
+                [status, attachmentPath, taskId]
+            );
+        } else {
+            await db.query(
+                `UPDATE tasks SET status = ? WHERE id = ?`,
+                [status, taskId]
+            );
+        }
 
-        res.status(200).json({ success: true, message: 'Status tugasan berjaya dikemaskini.', taskId, status });
+        const response = { success: true, message: 'Status tugasan berjaya dikemaskini.', taskId, status };
+        if (attachmentPath) response.attachment_path = attachmentPath;
+        res.status(200).json(response);
     } catch (err) {
         console.error('Ralat PATCH /api/tasks/:id/status:', err);
         res.status(500).json({ error: 'Gagal mengemaskini status tugasan.' });

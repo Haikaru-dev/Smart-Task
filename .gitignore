@@ -2,3 +2,7 @@
 .env.*
 node_modules/
 dist/
+
+# Fail upload pengguna — jangan commit ke repo
+Backend/uploads/tasks/*
+!Backend/uploads/tasks/.gitkeep

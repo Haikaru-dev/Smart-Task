@@ -4,27 +4,22 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 
-// Mock Data untuk Tugasan Semasa
-const MOCK_TASKS = [
-  { id: 'ORD-20260428-1021', name: 'Banting Merdeka', type: 'Design', date: '28/04/2026 10:00 AM', status: 'In Progress' },
-  { id: 'ORD-20260429-4432', name: 'Buku Nota Korporat', type: 'Printing', date: '29/04/2026 02:30 PM', status: 'Pending' },
-  { id: 'ORD-20260430-8891', name: 'Flyer Promosi Raya', type: 'Finishing', date: '30/04/2026 09:15 AM', status: 'Pending' }
-];
-
 export default function DetailStaf() {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [staff, setStaff] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
 
   useEffect(() => {
     async function fetchStaffDetail() {
       try {
         setLoading(true);
         const response = await axios.get(`${API_BASE_URL}/api/staff/${id}`);
-        // Jika data dibungkus dalam 'data'
         const data = response.data.data || response.data;
         setStaff(data);
       } catch (err) {
@@ -34,7 +29,21 @@ export default function DetailStaf() {
         setLoading(false);
       }
     }
+
+    async function fetchStaffTasks() {
+      try {
+        setTasksLoading(true);
+        const res = await axios.get(`${API_BASE_URL}/api/staff/tasks/${id}`);
+        setTasks(Array.isArray(res.data) ? res.data : []);
+      } catch {
+        setTasks([]);
+      } finally {
+        setTasksLoading(false);
+      }
+    }
+
     fetchStaffDetail();
+    fetchStaffTasks();
   }, [id]);
 
   if (loading) {
@@ -153,7 +162,11 @@ export default function DetailStaf() {
           <section className="section-card" aria-label="Tugasan Semasa">
             <header className="section-card-header">
               <div className="section-card-title">Status Tugasan Semasa</div>
-              <span className="badge badge--warning" style={{ fontSize: '11px' }}>Mock Data</span>
+              {!tasksLoading && (
+                <span className="badge badge--gray" style={{ fontSize: '11px' }}>
+                  {tasks.length} tugasan
+                </span>
+              )}
             </header>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
@@ -161,30 +174,55 @@ export default function DetailStaf() {
                   <tr>
                     <th>ID Order</th>
                     <th>Tugasan</th>
-                    <th>Tarikh & Masa</th>
+                    <th>Tarikh Hantar</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {MOCK_TASKS.map((task, index) => (
-                    <tr key={index}>
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span className="td-id">{task.id}</span>
-                          <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{task.name}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="badge badge--info">{task.type}</span>
-                      </td>
-                      <td className="td-mono">{task.date}</td>
-                      <td>
-                        <span className={`badge ${task.status === 'In Progress' ? 'badge--warning' : 'badge--gray'}`}>
-                          {task.status}
-                        </span>
+                  {tasksLoading ? (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: '#94A3B8' }}>
+                        Memuatkan tugasan...
                       </td>
                     </tr>
-                  ))}
+                  ) : tasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: '#94A3B8' }}>
+                        Tiada tugasan diagihkan kepada staf ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    tasks.map(task => (
+                      <tr key={task.id}>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span className="td-id">{task.order_number || `#${task.order_id}`}</span>
+                            <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                              {task.client_name || '—'}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="badge badge--info">{task.task_type}</span>
+                        </td>
+                        <td className="td-mono">
+                          {task.due_date
+                            ? new Date(task.due_date).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'}
+                        </td>
+                        <td>
+                          <span className={
+                            task.status === 'Completed'   ? 'badge badge--success' :
+                            task.status === 'In Progress' ? 'badge badge--warning' :
+                            'badge badge--gray'
+                          }>
+                            {task.status === 'Completed'   ? 'Selesai'      :
+                             task.status === 'In Progress' ? 'Dalam Proses' : 'Menunggu'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

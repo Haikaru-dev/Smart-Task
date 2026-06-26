@@ -90,6 +90,10 @@ export default function TugasanStaf() {
   const [saving, setSaving]         = useState(false);
   const [saveMsg, setSaveMsg]       = useState(null);
 
+  // Sejarah cuti terkini (diambil dari API)
+  const [leaveHistory, setLeaveHistory] = useState([]);
+  const [leavesLoading, setLeavesLoading] = useState(false);
+
   // ── Ambil tugasan staf ──
   const fetchTasks = useCallback(async () => {
     if (!staffId) { setLoading(false); return; }
@@ -106,7 +110,17 @@ export default function TugasanStaf() {
     }
   }, [staffId]);
 
-  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => {
+    fetchTasks();
+    // Ambil 5 sejarah cuti terkini untuk paparan ringkas
+    if (staffId) {
+      setLeavesLoading(true);
+      axios.get(`${API_BASE_URL}/api/staff/leaves/${staffId}`)
+        .then(res => setLeaveHistory(Array.isArray(res.data) ? res.data.slice(0, 5) : []))
+        .catch(() => setLeaveHistory([]))
+        .finally(() => setLeavesLoading(false));
+    }
+  }, [fetchTasks, staffId]);
 
   // ── Metrik dikira secara dinamik ──
   const countNew        = tasks.filter(t => t.status?.toLowerCase() === 'pending').length;
@@ -144,15 +158,39 @@ export default function TugasanStaf() {
     setSaving(true);
     setSaveMsg(null);
 
+    // Validasi fail client-side sebelum hantar
+    if (form.file) {
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+      if (!ALLOWED_TYPES.includes(form.file.type)) {
+        setSaveMsg({ type: 'error', text: 'Jenis fail tidak dibenarkan. Hanya JPG, PNG, dan PDF diterima.' });
+        setSaving(false);
+        return;
+      }
+      if (form.file.size > 5 * 1024 * 1024) {
+        setSaveMsg({ type: 'error', text: 'Fail terlalu besar. Had maksimum ialah 5MB.' });
+        setSaving(false);
+        return;
+      }
+    }
+
     try {
-      await axios.patch(`${API_BASE_URL}/api/tasks/${activeTask.id}/status`, {
-        status: form.status
-      });
+      const formData = new FormData();
+      formData.append('status', form.status);
+      if (form.file) formData.append('file', form.file);
+
+      const res = await axios.patch(
+        `${API_BASE_URL}/api/tasks/${activeTask.id}/status`,
+        formData
+        // axios set Content-Type multipart/form-data dengan boundary secara automatik
+      );
 
       setSaveMsg({ type: 'success', text: 'Status tugasan berjaya dikemaskini!' });
       setTasks(prev => prev.map(t =>
-        t.id === activeTask.id ? { ...t, status: form.status } : t
+        t.id === activeTask.id
+          ? { ...t, status: form.status, attachment_path: res.data.attachment_path ?? t.attachment_path }
+          : t
       ));
+      setForm(f => ({ ...f, file: null }));
       setTimeout(closeModal, 1200);
     } catch (err) {
       const msg = err.response?.data?.error || 'Gagal menyimpan. Cuba semula.';
@@ -161,13 +199,6 @@ export default function TugasanStaf() {
       setSaving(false);
     }
   };
-
-  // ── Jadual Sejarah Permohonan — data statik MVP ──
-  const sejarah = [
-    { tarikh: '2026-05-10', sebab: 'Cuti Sakit (MC) - Demam',         status: 'Lulus' },
-    { tarikh: '2026-04-22', sebab: 'Urusan Keluarga - Balik kampung',  status: 'Lulus' },
-    { tarikh: '2026-04-05', sebab: 'Cuti Tahunan - Percutian',         status: 'Ditolak' },
-  ];
 
   // ── JSON-LD Data ──
   const jsonLdData = {
@@ -360,6 +391,16 @@ export default function TugasanStaf() {
                         >
                           <EditIcon /> Kemaskini
                         </button>
+                        {task.attachment_path && (
+                          <a
+                            href={`${API_BASE_URL}${task.attachment_path}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: 11, color: '#2563EB', textDecoration: 'none', display: 'block', marginTop: 5 }}
+                          >
+                            📎 Lihat Lampiran
+                          </a>
+                        )}
                       </td>
                     </tr>
                   );
@@ -371,14 +412,18 @@ export default function TugasanStaf() {
         <Pagination total={tasks.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
       </section>
 
-      {/* ── Jadual Sejarah Permohonan ── */}
+      {/* ── Jadual Sejarah Permohonan Cuti ── */}
       <section className="section-card" aria-label="Sejarah Cuti">
         <header className="section-card-header">
           <div className="section-card-title">
             <div className="title-accent-dot" style={{ background: '#8B5CF6' }} />
             Sejarah Permohonan Cuti
+            {leaveHistory.length > 0 && (
+              <span className="badge badge--gray badge no-dot" style={{ fontSize: 11 }}>
+                {leaveHistory.length} terkini
+              </span>
+            )}
           </div>
-          <span className="section-card-meta">3 rekod terkini</span>
         </header>
 
         <div style={{ overflowX: 'auto' }}>
@@ -391,17 +436,37 @@ export default function TugasanStaf() {
               </tr>
             </thead>
             <tbody>
-              {sejarah.map((row, i) => (
-                <tr key={i}>
-                  <td><span className="td-mono">{formatDate(row.tarikh)}</span></td>
-                  <td style={{ color: '#475569' }}>{row.sebab}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={row.status === 'Lulus' ? badge.success : badge.danger}>
-                      {row.status}
-                    </span>
+              {leavesLoading ? (
+                <tr>
+                  <td colSpan={3} style={{ textAlign: 'center', padding: '30px', color: '#94A3B8' }}>
+                    Memuatkan sejarah cuti...
                   </td>
                 </tr>
-              ))}
+              ) : leaveHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={3} style={{ textAlign: 'center', padding: '30px', color: '#94A3B8' }}>
+                    Tiada rekod permohonan cuti.
+                  </td>
+                </tr>
+              ) : (
+                leaveHistory.map(leave => {
+                  const statusLabel =
+                    leave.status === 'Approved' ? 'Lulus' :
+                    leave.status === 'Rejected' ? 'Ditolak' : 'Menunggu';
+                  const statusStyle =
+                    leave.status === 'Approved' ? badge.success :
+                    leave.status === 'Rejected' ? badge.danger : badge.warning;
+                  return (
+                    <tr key={leave.id}>
+                      <td><span className="td-mono">{formatDate(leave.start_date)}</span></td>
+                      <td style={{ color: '#475569' }}>{leave.reason || '—'}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={statusStyle}>{statusLabel}</span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -444,6 +509,21 @@ export default function TugasanStaf() {
                     <option value="Completed">Selesai (Completed)</option>
                   </select>
                 </div>
+
+                {/* Lampiran sedia ada */}
+                {activeTask?.attachment_path && (
+                  <div style={modal.field}>
+                    <label style={modal.label}>Lampiran Sedia Ada</label>
+                    <a
+                      href={`${API_BASE_URL}${activeTask.attachment_path}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 13, color: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                    >
+                      📎 Lihat Lampiran
+                    </a>
+                  </div>
+                )}
 
                 {/* Upload Fail */}
                 <div style={modal.field}>

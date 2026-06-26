@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     status            ENUM('Pending','In Progress','Completed') NOT NULL DEFAULT 'Pending',
     approval_status   ENUM('Draft','Confirmed')                 NOT NULL DEFAULT 'Confirmed'
         COMMENT 'Draft = belum disahkan admin; Confirmed = staf boleh lihat',
+    attachment_path   VARCHAR(255) NULL
+        COMMENT 'Laluan relatif fail yang dimuat naik oleh staf, contoh: /uploads/tasks/task-1-1234567890.pdf',
     created_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_tasks_order

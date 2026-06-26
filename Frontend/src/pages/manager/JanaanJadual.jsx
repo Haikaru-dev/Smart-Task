@@ -1,5 +1,6 @@
 // src/pages/manager/JanaanJadual.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
@@ -123,6 +124,7 @@ export default function JanaanJadual() {
   const [error, setError]               = useState(null);
   const [toast, setToast]               = useState(null);
   const [staffList, setStaffList]       = useState([]);
+  const [orderCount, setOrderCount]     = useState(null); // null = belum selesai muatkan
 
   // ── State: cadangan AI (in-memory, belum disimpan ke DB) ──
   const [proposals, setProposals]           = useState(null);
@@ -162,13 +164,19 @@ export default function JanaanJadual() {
   }, []);
 
   useEffect(() => {
-    async function fetchStaff() {
+    async function fetchInitialData() {
       try {
-        const res = await axios.get(`${API_BASE_URL}/api/staff`);
-        setStaffList(Array.isArray(res.data) ? res.data : []);
-      } catch { /* senyap */ }
+        const [staffRes, ordersRes] = await Promise.all([
+          axios.get(`${API_BASE_URL}/api/staff`),
+          axios.get(`${API_BASE_URL}/api/orders`),
+        ]);
+        setStaffList(Array.isArray(staffRes.data) ? staffRes.data : []);
+        setOrderCount(Array.isArray(ordersRes.data) ? ordersRes.data.length : 0);
+      } catch {
+        setOrderCount(0);
+      }
     }
-    fetchStaff();
+    fetchInitialData();
     fetchBoard();
   }, [fetchBoard]);
 
@@ -834,17 +842,63 @@ export default function JanaanJadual() {
                 <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
               </svg>
             </div>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#334155' }}>Tiada tugasan diagihkan</p>
-            <p style={{ margin: '6px 0 20px', fontSize: 13, color: '#94A3B8' }}>
-              Tekan <strong>"Jana Cadangan AI"</strong> untuk menjana cadangan agihan tugasan.
-            </p>
-            <button className="btn btn--primary" onClick={handleJanaAgihan}
-              disabled={isGenerating}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, opacity: isGenerating ? 0.75 : 1 }}>
-              {isGenerating
-                ? <><span style={spinSty} /> AI Sedang Menganalisis...</>
-                : <><SparkleIcon /> Jana Cadangan AI</>}
-            </button>
+
+            {orderCount === 0 ? (
+              /* Kes: tiada orders langsung — tunjuk panduan 2 langkah */
+              <>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#334155' }}>Belum ada tempahan</p>
+                <p style={{ margin: '6px 0 24px', fontSize: 13, color: '#94A3B8' }}>
+                  Ikuti langkah di bawah untuk mula menggunakan agihan tugasan AI.
+                </p>
+                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 12, textAlign: 'left', maxWidth: 320 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12,
+                    background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '12px 16px' }}>
+                    <span style={{ flexShrink: 0, width: 24, height: 24, borderRadius: '50%',
+                      background: '#2563EB', color: '#fff', fontSize: 12, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1E40AF' }}>Tambah tempahan baharu</p>
+                      <p style={{ margin: '3px 0 8px', fontSize: 12, color: '#3B82F6' }}>
+                        Pergi ke halaman Tempahan dan buat tempahan pertama anda.
+                      </p>
+                      <Link to="/tempahan"
+                        style={{ fontSize: 12, fontWeight: 600, color: '#2563EB', textDecoration: 'none',
+                          background: '#DBEAFE', padding: '4px 10px', borderRadius: 6 }}>
+                        Pergi ke Tempahan →
+                      </Link>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12,
+                    background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 16px',
+                    opacity: 0.6 }}>
+                    <span style={{ flexShrink: 0, width: 24, height: 24, borderRadius: '50%',
+                      background: '#94A3B8', color: '#fff', fontSize: 12, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>2</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#64748B' }}>Jana cadangan AI</p>
+                      <p style={{ margin: '3px 0 0', fontSize: 12, color: '#94A3B8' }}>
+                        Kembali ke sini dan tekan "Jana Cadangan AI" setelah ada tempahan.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* Kes: ada orders, papan kosong sebab belum generate */
+              <>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#334155' }}>Tiada tugasan diagihkan</p>
+                <p style={{ margin: '6px 0 20px', fontSize: 13, color: '#94A3B8' }}>
+                  Tekan <strong>"Jana Cadangan AI"</strong> untuk menjana cadangan agihan tugasan.
+                </p>
+                <button className="btn btn--primary" onClick={handleJanaAgihan}
+                  disabled={isGenerating}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, opacity: isGenerating ? 0.75 : 1 }}>
+                  {isGenerating
+                    ? <><span style={spinSty} /> AI Sedang Menganalisis...</>
+                    : <><SparkleIcon /> Jana Cadangan AI</>}
+                </button>
+              </>
+            )}
           </div>
         ) : viewMode === 'staf' ? (
           <div style={{ padding: '20px 24px' }}>

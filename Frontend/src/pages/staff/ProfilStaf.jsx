@@ -141,6 +141,11 @@ export default function ProfilStaf() {
     
     // Validasi kata laluan (jika diisi)
     if (newPassword) {
+      if (!currentPassword) {
+        setToast({ type: 'error', text: 'Kata laluan semasa diperlukan untuk menukar kata laluan.' });
+        setSaving(false);
+        return;
+      }
       if (newPassword.length < 6) {
         setToast({ type: 'error', text: 'Kata laluan baharu mestilah sekurang-kurangnya 6 aksara.' });
         setSaving(false);

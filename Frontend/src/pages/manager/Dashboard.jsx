@@ -105,17 +105,7 @@ export default function Dashboard() {
         setLeaveStats(leaveRes.data);
       } catch (err) {
         console.error('Dashboard fetch error:', err);
-        setError('Gagal memuatkan data. Sila cuba semula.');
-
-        // Fallback data untuk development/demo
-        setStats({ pending: 12, completed: 45, activeStaff: 8, onLeave: 2,
-                   inProgress: 3, pendingLeaves: 2, completionRate: 68 });
-        setAuditLogs([
-          { id: 1, time: '10:05 AM', user: 'Staf Ali',
-            activity: "Menukar status Order #102 kepada 'Siap'", status: 'Selesai' },
-          { id: 2, time: '09:45 AM', user: 'Admin',
-            activity: 'Meluluskan Cuti Staf Sarah', status: 'Log' },
-        ]);
+        setError('Gagal memuatkan data dashboard. Pastikan backend berjalan dan cuba semula.');
       } finally {
         setLoading(false);
         setChartsLoading(false);
@@ -319,7 +309,7 @@ export default function Dashboard() {
             fontSize: 12,
             color: '#92400E',
           }}>
-            ⚠ {error} (Memaparkan data demo)
+            ⚠ {error}
           </div>
         )}
 
