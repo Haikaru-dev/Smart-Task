@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
+import Pagination from '../../components/Pagination';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const CalendarIcon = () => (
@@ -78,9 +79,11 @@ export default function CutiStaf() {
   const staffName = staffUser?.name    || staffUser?.username || 'Staf';
 
   // ── State: senarai cuti ──
-  const [leaves, setLeaves]     = useState([]);
+  const [leaves, setLeaves]         = useState([]);
   const [loadLeaves, setLoadLeaves] = useState(true);
   const [leaveError, setLeaveError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'approved' | 'rejected'
+  const [page, setPage]                 = useState(1);
 
   // ── State: borang ──
   const [form, setForm]         = useState({
@@ -156,6 +159,18 @@ export default function CutiStaf() {
   // ── Kira statistik ringkas ──
   const countPending  = leaves.filter(l => l.status?.toLowerCase() === 'pending').length;
   const countApproved = leaves.filter(l => l.status?.toLowerCase() === 'approved').length;
+  const countRejected = leaves.filter(l => l.status?.toLowerCase() === 'rejected').length;
+
+  // ── Tapis rekod ikut tab yang dipilih ──
+  const filteredLeaves = statusFilter === 'all'
+    ? leaves
+    : leaves.filter(l => l.status?.toLowerCase() === statusFilter);
+
+  // Reset halaman bila penapis bertukar
+  useEffect(() => { setPage(1); }, [statusFilter]);
+
+  const PAGE_SIZE = 10;
+  const paginatedLeaves = filteredLeaves.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="page-content">
@@ -387,6 +402,46 @@ export default function CutiStaf() {
             </button>
           </div>
 
+          {/* ── Tab Penapis Status ── */}
+          <div style={{
+            display: 'flex', gap: 6, padding: '10px 20px',
+            borderBottom: '1px solid #F1F5F9', flexWrap: 'wrap',
+          }}>
+            {[
+              { key: 'all',      label: 'Semua',      count: leaves.length,  color: '#64748B', activeBg: '#1E293B', activeColor: '#fff' },
+              { key: 'pending',  label: 'Pending',    count: countPending,   color: '#B45309', activeBg: '#FEF3C7', activeColor: '#92400E' },
+              { key: 'approved', label: 'Diluluskan', count: countApproved,  color: '#15803D', activeBg: '#DCFCE7', activeColor: '#14532D' },
+              { key: 'rejected', label: 'Ditolak',    count: countRejected,  color: '#B91C1C', activeBg: '#FEE2E2', activeColor: '#991B1B' },
+            ].map(tab => {
+              const active = statusFilter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setStatusFilter(tab.key)}
+                  style={{
+                    padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                    borderRadius: 20, border: '1px solid transparent',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                    background: active ? tab.activeBg : '#F8FAFC',
+                    color: active ? tab.activeColor : tab.color,
+                    borderColor: active ? 'transparent' : '#E2E8F0',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {tab.label}
+                  <span style={{
+                    fontSize: 10, fontWeight: 700,
+                    background: active ? 'rgba(0,0,0,0.12)' : '#E2E8F0',
+                    color: active ? 'inherit' : '#64748B',
+                    borderRadius: 10, padding: '1px 6px',
+                  }}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <div style={{ overflowX: 'auto' }}>
             {/* Ralat */}
             {leaveError && (
@@ -411,7 +466,7 @@ export default function CutiStaf() {
                       Memuatkan sejarah...
                     </td>
                   </tr>
-                ) : leaves.length === 0 ? (
+                ) : filteredLeaves.length === 0 ? (
                   <tr>
                     <td colSpan={4}>
                       <div style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -422,15 +477,18 @@ export default function CutiStaf() {
                           fontSize: 22,
                         }}>📋</div>
                         <p style={{ margin: 0, fontSize: 13, color: '#94A3B8' }}>
-                          Tiada rekod permohonan cuti.
+                          {leaves.length === 0
+                            ? 'Tiada rekod permohonan cuti.'
+                            : 'Tiada rekod untuk penapis yang dipilih.'}
                         </p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  leaves.map((leave, i) => {
-                    const badge  = getStatusBadge(leave.status);
-                    const days   = daysBetween(leave.start_date, leave.end_date);
+                  paginatedLeaves.map((leave, i) => {
+                    const badge     = getStatusBadge(leave.status);
+                    const days      = daysBetween(leave.start_date, leave.end_date);
+                    const isRejected = leave.status?.toLowerCase() === 'rejected';
                     return (
                       <tr key={leave.id || i}>
                         {/* Tarikh */}
@@ -461,7 +519,7 @@ export default function CutiStaf() {
                           </span>
                         </td>
 
-                        {/* Status Badge */}
+                        {/* Status Badge + Sebab Penolakan */}
                         <td style={{ textAlign: 'center' }}>
                           <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -475,6 +533,15 @@ export default function CutiStaf() {
                             }} />
                             {badge.label}
                           </span>
+                          {isRejected && leave.rejection_reason && (
+                            <div style={{
+                              marginTop: 5, fontSize: 11, color: '#B91C1C',
+                              fontStyle: 'italic', maxWidth: 160, margin: '5px auto 0',
+                              textAlign: 'left', lineHeight: 1.4,
+                            }}>
+                              "{leave.rejection_reason}"
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -484,22 +551,29 @@ export default function CutiStaf() {
             </table>
           </div>
 
+          <Pagination total={filteredLeaves.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
+
           {/* Footer ringkasan */}
           {leaves.length > 0 && (
             <div style={{
               padding: '12px 22px', borderTop: '1px solid #F1F5F9',
-              background: '#FAFBFD', display: 'flex', gap: 20,
+              background: '#FAFBFD', display: 'flex', gap: 20, alignItems: 'center',
             }}>
               {[
-                { label: 'Pending', count: countPending, color: '#D97706' },
+                { label: 'Pending',    count: countPending,  color: '#D97706' },
                 { label: 'Diluluskan', count: countApproved, color: '#15803D' },
-                { label: 'Ditolak', count: leaves.filter(l => l.status?.toLowerCase() === 'rejected').length, color: '#B91C1C' },
+                { label: 'Ditolak',    count: countRejected, color: '#B91C1C' },
               ].map(s => (
                 <div key={s.label} style={{ fontSize: 12, color: '#64748B' }}>
                   <span style={{ fontWeight: 700, color: s.color }}>{s.count}</span>{' '}
                   {s.label}
                 </div>
               ))}
+              {statusFilter !== 'all' && (
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94A3B8' }}>
+                  Menunjukkan {filteredLeaves.length} daripada {leaves.length} rekod
+                </span>
+              )}
             </div>
           )}
         </div>

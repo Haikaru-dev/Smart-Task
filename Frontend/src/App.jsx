@@ -29,14 +29,23 @@ import ProfilStaf from './pages/staff/ProfilStaf';
 
 // ── Protected Route: Portal Pengurus ──────────────────────────────
 function PrivateRoute({ children }) {
-  const userLoggedIn = localStorage.getItem('authToken') || localStorage.getItem('user');
-  return userLoggedIn ? children : <Navigate to="/login" replace />;
+  const token = localStorage.getItem('authToken');
+  const userData = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || 'null'); }
+    catch { return null; }
+  })();
+  const isManager = userData?.role === 'Manager' || userData?.role === 'Admin';
+  return (token && isManager) ? children : <Navigate to="/login" replace />;
 }
 
 // ── Protected Route: Portal Staf ──────────────────────────────────
 function StaffPrivateRoute({ children }) {
-  const staffLoggedIn = localStorage.getItem('staffUser');
-  return staffLoggedIn ? children : <Navigate to="/staf/login" replace />;
+  const token = localStorage.getItem('authToken');
+  const staffUser = (() => {
+    try { return JSON.parse(localStorage.getItem('staffUser') || 'null'); }
+    catch { return null; }
+  })();
+  return (token && staffUser?.role === 'Staff') ? children : <Navigate to="/staf/login" replace />;
 }
 
 export default function App() {

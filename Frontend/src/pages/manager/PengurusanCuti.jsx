@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
+import Pagination from '../../components/Pagination';
 
 // --- Ikon ---
 const CheckIcon = () => (
@@ -19,6 +20,7 @@ const XIcon = () => (
 export default function PengurusanCuti() {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
 
   // Ambil senarai cuti dari backend
   const fetchLeaves = async () => {
@@ -75,6 +77,9 @@ export default function PengurusanCuti() {
     return { bg: '#FEF3C7', color: '#92400E', label: 'Pending' };
   };
 
+  const PAGE_SIZE = 10;
+  const paginatedLeaves = leaves.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <div className="page-content" style={{ padding: '24px' }}>
       <header style={{ marginBottom: '24px' }}>
@@ -107,7 +112,7 @@ export default function PengurusanCuti() {
               </tr>
             </thead>
             <tbody>
-              {leaves.map((leave) => {
+              {paginatedLeaves.map((leave) => {
                 const badge = getStatusBadge(leave.status);
                 const isPending = (leave.status || '').toLowerCase() === 'pending';
                 
@@ -167,6 +172,7 @@ export default function PengurusanCuti() {
             </tbody>
           </table>
         )}
+        <Pagination total={leaves.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </div>
   );

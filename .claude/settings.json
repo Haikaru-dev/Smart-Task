@@ -1,0 +1,18 @@
+﻿{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(*git commit*)",
+            "prompt": "You are gating a git commit for the SmartTask project. Run git diff --staged (if nothing is staged, run git diff against the last commit instead) and review exactly the way the project's code-reviewer subagent would: read every changed file in full, not just the diff hunk, and check auth middleware coverage on any route, parameterized SQL on every query, MySQL transaction wrapping for multi-row writes, whether any change rewrites the Gemini AI scheduling/workload logic instead of layering validation around it, and backward compatibility for any schema or response-shape change. You have Read, Grep, Glob, and Bash tools -- use them to actually inspect the files, do not guess from the diff alone. Respond with ALLOW if there are no CRITICAL or HIGH severity issues. Respond with BLOCK and a specific, file-and-line-referenced reason if there are. Do not block on style preferences, missing tests, or anything below HIGH severity -- this gate exists to catch real bugs and security issues before they are committed, not to enforce perfection.",
+            "timeout": 120,
+            "statusMessage": "Running fresh-eyes review before commit..."
+          }
+        ]
+      }
+    ]
+  }
+}

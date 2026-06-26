@@ -83,7 +83,7 @@ app.post('/api/login', async (req, res) => {
         const token = jwt.sign(
             { userId: user.id, role: user.role, staffId },
             process.env.JWT_SECRET || 'smarttask_dev_secret_TUKAR_DI_PRODUKSI',
-            { expiresIn: '8h' }
+            { expiresIn: '24h' }
         );
         res.status(200).json({
             success: true,
@@ -192,7 +192,25 @@ app.get('/api/dashboard/stats', verifyToken, requireRole('Manager'), async (req,
             [today, today]
         );
 
-        res.status(200).json({ pending, completed, activeStaff, onLeave });
+        // Kira tempahan In Progress
+        const [[{ inProgress }]] = await db.query(
+            `SELECT COUNT(*) AS inProgress FROM orders WHERE status = 'In Progress'`
+        );
+        // Kira permohonan cuti Pending
+        const [[{ pendingLeaves }]] = await db.query(
+            `SELECT COUNT(*) AS pendingLeaves FROM leaves WHERE status = 'Pending'`
+        );
+        // Kadar penyelesaian tugasan (tugasan Confirmed sahaja)
+        const [[taskRow]] = await db.query(
+            `SELECT COUNT(*) AS total,
+                    SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS done
+             FROM tasks WHERE approval_status = 'Confirmed'`
+        );
+        const completionRate = taskRow.total > 0
+            ? Math.round((taskRow.done / taskRow.total) * 100)
+            : 0;
+
+        res.status(200).json({ pending, completed, activeStaff, onLeave, inProgress, pendingLeaves, completionRate });
     } catch (err) {
         console.error("Ralat dashboard/stats:", err);
         res.status(500).json({ error: "Gagal mengambil statistik dashboard." });
@@ -241,6 +259,74 @@ app.get('/api/dashboard/audit-logs', verifyToken, requireRole('Manager'), async 
     }
 });
 
+// Endpoint: trend tempahan bulanan (6 bulan lepas)
+app.get('/api/dashboard/order-trends', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT
+              DATE_FORMAT(created_at, '%b %Y') AS month_label,
+              DATE_FORMAT(created_at, '%Y-%m')  AS month_key,
+              COUNT(*) AS total,
+              SUM(CASE WHEN status = 'Completed'   THEN 1 ELSE 0 END) AS completed,
+              SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
+              SUM(CASE WHEN status = 'Pending'     THEN 1 ELSE 0 END) AS pending
+            FROM orders
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+            GROUP BY month_key, month_label
+            ORDER BY month_key ASC
+        `);
+        res.status(200).json(rows);
+    } catch (err) {
+        console.error("Ralat dashboard/order-trends:", err);
+        res.status(500).json({ error: "Gagal mengambil trend tempahan." });
+    }
+});
+
+// Endpoint: prestasi tugasan per staf aktif
+app.get('/api/dashboard/staff-performance', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT
+              s.full_name AS name,
+              s.job_title,
+              COUNT(t.id) AS total_tasks,
+              COALESCE(SUM(CASE WHEN t.status = 'Completed'   THEN 1 ELSE 0 END), 0) AS completed,
+              COALESCE(SUM(CASE WHEN t.status = 'In Progress' THEN 1 ELSE 0 END), 0) AS in_progress,
+              COALESCE(SUM(CASE WHEN t.status = 'Pending'     THEN 1 ELSE 0 END), 0) AS pending
+            FROM staff s
+            LEFT JOIN tasks t
+              ON t.assigned_staff_id = s.id AND t.approval_status = 'Confirmed'
+            WHERE s.status = 'Aktif'
+            GROUP BY s.id, s.full_name, s.job_title
+            ORDER BY total_tasks DESC
+            LIMIT 10
+        `);
+        res.status(200).json(rows);
+    } catch (err) {
+        console.error("Ralat dashboard/staff-performance:", err);
+        res.status(500).json({ error: "Gagal mengambil prestasi staf." });
+    }
+});
+
+// Endpoint: statistik cuti (mengikut status + bilangan menunggu bulan ini)
+app.get('/api/dashboard/leave-stats', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const [byStatus] = await db.query(
+            `SELECT status, COUNT(*) AS count FROM leaves GROUP BY status`
+        );
+        const [[{ pending_this_month }]] = await db.query(
+            `SELECT COUNT(*) AS pending_this_month FROM leaves
+             WHERE status = 'Pending'
+               AND MONTH(applied_at) = MONTH(NOW())
+               AND YEAR(applied_at)  = YEAR(NOW())`
+        );
+        res.status(200).json({ byStatus, pendingThisMonth: pending_this_month });
+    } catch (err) {
+        console.error("Ralat dashboard/leave-stats:", err);
+        res.status(500).json({ error: "Gagal mengambil statistik cuti." });
+    }
+});
+
 // ── STAFF ENDPOINTS ──────────────────────────────────────────────
 
 // Endpoint untuk mendapatkan senarai staf
@@ -257,14 +343,67 @@ app.get('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
 
 // Endpoint untuk tambah staf baharu
 app.post('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
-    try {
-        const { name, role, status } = req.body;
-        const sql = `INSERT INTO staff (full_name, job_title, status) VALUES (?, ?, ?)`;
-        const [result] = await db.query(sql, [name, role, status]);
-        res.status(201).json({ message: "Staf berjaya ditambah!", staffId: result.insertId });
-    } catch (err) {
-        console.error("Ralat MySQL:", err);
-        res.status(500).json({ error: "Gagal menambah staf." });
+    const { name, role } = req.body;
+    if (!name || !role) {
+        return res.status(400).json({ error: "Nama dan peranan wajib diisi." });
+    }
+
+    const PREFIX_MAP = {
+        'Designer':                        'designer',
+        'Operator Mesin (Banner/Bunting)': 'opmesin',
+        'Operator Digital':                'opdigital',
+        'Finishing':                       'finishing',
+        'Pengurusan / Admin':              'admin',
+    };
+    const prefix = PREFIX_MAP[role] ?? 'staf';
+
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const [existing] = await connection.query(
+                `SELECT username FROM users WHERE username LIKE ? ORDER BY username DESC LIMIT 1`,
+                [`${prefix}%`]
+            );
+            let nextNum = 1;
+            if (existing.length > 0) {
+                const match = existing[0].username.match(/(\d+)$/);
+                if (match) nextNum = parseInt(match[1], 10) + 1;
+            }
+            const username = `${prefix}${String(nextNum).padStart(2, '0')}`;
+
+            const hashedPassword = await bcrypt.hash('123', 10);
+
+            const [userResult] = await connection.query(
+                `INSERT INTO users (username, password, role, name) VALUES (?, ?, 'Staff', ?)`,
+                [username, hashedPassword, name]
+            );
+
+            const [staffResult] = await connection.query(
+                `INSERT INTO staff (full_name, job_title, status, user_id) VALUES (?, ?, 'Aktif', ?)`,
+                [name, role, userResult.insertId]
+            );
+
+            await connection.commit();
+            return res.status(201).json({
+                message: "Staf berjaya ditambah!",
+                staffId: staffResult.insertId,
+                username,
+            });
+
+        } catch (err) {
+            await connection.rollback();
+            if (err.code === 'ER_DUP_ENTRY' && attempt < MAX_RETRIES - 1) {
+                connection.release();
+                continue;
+            }
+            console.error("Ralat MySQL tambah staf:", err);
+            return res.status(500).json({ error: "Gagal menambah staf." });
+        } finally {
+            connection.release();
+        }
     }
 });
 
@@ -332,18 +471,25 @@ app.get('/api/manager/leaves', verifyToken, requireRole('Manager'), async (req, 
     }
 });
 
-// 2. Endpoint untuk Pengurus mengemas kini status cuti (Lulus/Ditolak)
+// 2. Endpoint untuk Pengurus mengemas kini status cuti (Approved/Rejected)
 app.put('/api/manager/leaves/:id', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const leaveId = req.params.id;
-        const { status } = req.body; // 'Lulus', 'Ditolak', dsb.
+        const { status, rejection_reason } = req.body;
 
-        const sql = `UPDATE leaves SET status = ? WHERE id = ?`;
-        await db.query(sql, [status, leaveId]);
-        
-        res.status(200).json({ message: `Cuti berjaya ${status}` });
+        const allowed = ['Approved', 'Rejected', 'Pending'];
+        if (!status || !allowed.includes(status)) {
+            return res.status(400).json({ error: `Status tidak sah. Nilai dibenarkan: ${allowed.join(', ')}.` });
+        }
+
+        await db.query(
+            `UPDATE leaves SET status = ?, rejection_reason = ? WHERE id = ?`,
+            [status, status === 'Rejected' ? (rejection_reason || null) : null, leaveId]
+        );
+
+        res.status(200).json({ success: true, message: `Status cuti berjaya dikemaskini kepada ${status}.` });
     } catch (err) {
-        console.error("Ralat MySQL:", err);
+        console.error("Ralat PUT /api/manager/leaves/:id:", err);
         res.status(500).json({ error: "Gagal mengemas kini status cuti." });
     }
 });
@@ -831,10 +977,14 @@ app.post('/api/tasks/save-assignments', verifyToken, requireRole('Manager'), asy
     }
 });
 
-// Mulakan pelayan (Server)
-app.listen(PORT, () => {
-    console.log(`Pelayan utama sedang berjalan di http://localhost:${PORT}`);
-});
+// Mulakan pelayan (Server) — hanya jika dijalankan terus, bukan semasa ujian
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Pelayan utama sedang berjalan di http://localhost:${PORT}`);
+    });
+}
+
+module.exports = app;
 
 // ── PORTAL STAF ENDPOINTS ─────────────────────────────────────────
 
@@ -1025,6 +1175,43 @@ app.put('/api/admin/update/:userId', verifyToken, requireRole('Manager'), async 
     } catch (err) {
         console.error("Ralat MySQL admin/update:", err);
         res.status(500).json({ error: "Gagal mengemaskini profil Admin." });
+    }
+});
+
+// Kemaskini status tugasan (Staff: tugasan sendiri sahaja; Manager: mana-mana tugasan)
+app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
+    try {
+        const taskId = parseInt(req.params.id, 10);
+        const { status } = req.body;
+
+        const ALLOWED = ['Pending', 'In Progress', 'Completed'];
+        if (!status || !ALLOWED.includes(status)) {
+            return res.status(400).json({
+                error: `Status tidak sah. Nilai yang dibenarkan: ${ALLOWED.join(', ')}.`
+            });
+        }
+
+        if (req.user.role === 'Staff') {
+            const [[task]] = await db.query(
+                `SELECT assigned_staff_id FROM tasks WHERE id = ? AND approval_status = 'Confirmed'`,
+                [taskId]
+            );
+            if (!task) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
+            if (String(task.assigned_staff_id) !== String(req.user.staffId)) {
+                return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh kemaskini tugasan sendiri.' });
+            }
+        }
+
+        const [result] = await db.query(
+            `UPDATE tasks SET status = ? WHERE id = ?`,
+            [status, taskId]
+        );
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
+
+        res.status(200).json({ success: true, message: 'Status tugasan berjaya dikemaskini.', taskId, status });
+    } catch (err) {
+        console.error('Ralat PATCH /api/tasks/:id/status:', err);
+        res.status(500).json({ error: 'Gagal mengemaskini status tugasan.' });
     }
 });
 

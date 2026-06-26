@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
+import Pagination from '../../components/Pagination';
 
 // ── Helper: format tarikh DD/MM/YYYY ──
 function formatDate(dateStr) {
@@ -51,13 +52,22 @@ export default function Cuti() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
 
-  // Modal state
+  // Modal state (rekod cuti baru)
   const [isModalOpen, setIsModalOpen]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitMsg, setSubmitMsg]       = useState(null); // { type: 'success'|'error', text }
+  const [submitMsg, setSubmitMsg]       = useState(null);
   const [formData, setFormData]         = useState({
     staff_id: '', start_date: '', end_date: '', reason: ''
   });
+
+  // Approve / Reject state
+  const [actionLoading, setActionLoading] = useState(null);
+  const [rejectModal, setRejectModal]     = useState(null);
+  const [rejectReason, setRejectReason]   = useState('');
+  const [actionToast, setActionToast]     = useState(null);
+
+  // Pagination
+  const [page, setPage] = useState(1);
 
   // ── Ambil data cuti ──
   async function fetchLeaves() {
@@ -101,6 +111,29 @@ export default function Cuti() {
   const thisMonthCount = leaves.filter(l => l.applied_at?.slice(0, 7) === thisMonth).length;
   const pendingCount   = leaves.filter(l => l.status?.toLowerCase() === 'pending').length;
 
+  // ── Luluskan atau Tolak permohonan cuti ──
+  const handleAction = async (id, status, reason = '') => {
+    setActionLoading(id);
+    try {
+      await axios.put(`${API_BASE_URL}/api/manager/leaves/${id}`, {
+        status,
+        ...(status === 'Rejected' ? { rejection_reason: reason } : {})
+      });
+      setActionToast({
+        type: 'success',
+        text: status === 'Approved' ? '✓ Cuti berjaya diluluskan.' : '✕ Cuti berjaya ditolak.'
+      });
+      setRejectModal(null);
+      setRejectReason('');
+      fetchLeaves();
+    } catch (err) {
+      setActionToast({ type: 'error', text: err.response?.data?.error || 'Gagal mengemas kini status cuti.' });
+    } finally {
+      setActionLoading(null);
+      setTimeout(() => setActionToast(null), 4000);
+    }
+  };
+
   // ── Handle input borang ──
   const handleChange = (e) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -133,6 +166,9 @@ export default function Cuti() {
     setSubmitMsg(null);
     setFormData({ staff_id: '', start_date: '', end_date: '', reason: '' });
   };
+
+  const PAGE_SIZE = 10;
+  const paginatedLeaves = leaves.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // ── KPI Cards ──
   const kpiCards = [
@@ -181,6 +217,23 @@ export default function Cuti() {
         </div>
       )}
 
+      {/* ── Action Toast ── */}
+      {actionToast && (
+        <div style={{
+          padding: '12px 18px', borderRadius: 10, marginBottom: 16, fontSize: 13, fontWeight: 500,
+          background: actionToast.type === 'success' ? '#DCFCE7' : '#FEF2F2',
+          color:      actionToast.type === 'success' ? '#15803D'  : '#B91C1C',
+          border:     `1px solid ${actionToast.type === 'success' ? '#86EFAC' : '#FCA5A5'}`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          {actionToast.text}
+          <button onClick={() => setActionToast(null)} style={{
+            marginLeft: 'auto', background: 'none', border: 'none',
+            cursor: 'pointer', fontSize: 18, color: 'inherit', lineHeight: 1,
+          }}>×</button>
+        </div>
+      )}
+
       {/* ── Jadual Rekod Cuti ── */}
       <section className="section-card" aria-label="Rekod Cuti">
         <header className="section-card-header">
@@ -203,23 +256,24 @@ export default function Cuti() {
                 <th>Tarikh Tamat</th>
                 <th>Sebab / Nota</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
+                <th style={{ textAlign: 'center' }}>Tindakan</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
                     Memuatkan data...
                   </td>
                 </tr>
               ) : leaves.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
                     Tiada rekod cuti dijumpai.
                   </td>
                 </tr>
               ) : (
-                leaves.map((rec, idx) => {
+                paginatedLeaves.map((rec, idx) => {
                   const { cls, label } = getStatusBadge(rec.status);
                   return (
                     <tr key={rec.id ?? idx}>
@@ -241,6 +295,31 @@ export default function Cuti() {
                       <td style={{ textAlign: 'center' }}>
                         <span className={cls}>{label}</span>
                       </td>
+                      {/* Tindakan */}
+                      <td style={{ textAlign: 'center' }}>
+                        {rec.status?.toLowerCase() === 'pending' ? (
+                          <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                            <button
+                              onClick={() => handleAction(rec.id, 'Approved')}
+                              disabled={actionLoading === rec.id}
+                              style={{ padding: '5px 11px', fontSize: 11.5, fontWeight: 600, borderRadius: 7, border: 'none', cursor: 'pointer', background: '#DCFCE7', color: '#15803D' }}>
+                              ✓ Lulus
+                            </button>
+                            <button
+                              onClick={() => { setRejectModal({ id: rec.id }); setRejectReason(''); }}
+                              disabled={actionLoading === rec.id}
+                              style={{ padding: '5px 11px', fontSize: 11.5, fontWeight: 600, borderRadius: 7, border: 'none', cursor: 'pointer', background: '#FEE2E2', color: '#B91C1C' }}>
+                              ✕ Tolak
+                            </button>
+                          </div>
+                        ) : rec.status?.toLowerCase() === 'rejected' && rec.rejection_reason ? (
+                          <div style={{ fontSize: 11.5, color: '#B91C1C', fontStyle: 'italic', maxWidth: 200, margin: '0 auto', textAlign: 'left' }}>
+                            "{rec.rejection_reason}"
+                          </div>
+                        ) : (
+                          <span style={{ color: '#CBD5E1', fontSize: 12 }}>—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })
@@ -248,7 +327,51 @@ export default function Cuti() {
             </tbody>
           </table>
         </div>
+        <Pagination total={leaves.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
       </section>
+
+      {/* ── Modal Tolak Cuti ── */}
+      {rejectModal && (
+        <div style={modalStyles.overlay} onClick={e => e.target === e.currentTarget && setRejectModal(null)}>
+          <div style={{ ...modalStyles.modal, maxWidth: 420 }}>
+            <div style={modalStyles.header}>
+              <div>
+                <h2 style={modalStyles.title}>Tolak Permohonan Cuti</h2>
+                <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', marginTop: 2 }}>
+                  Sila berikan sebab penolakan (pilihan)
+                </p>
+              </div>
+              <button style={modalStyles.closeBtn} onClick={() => setRejectModal(null)}>×</button>
+            </div>
+            <div style={{ padding: '20px 24px' }}>
+              <label style={{ ...modalStyles.label, display: 'block', marginBottom: 8 }}>
+                Sebab Penolakan
+              </label>
+              <textarea
+                style={{ ...modalStyles.input, minHeight: 90, resize: 'vertical' }}
+                placeholder="Contoh: Kurang staf pada tarikh berkenaan, sila mohon semula pada bulan hadapan."
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div style={modalStyles.footer}>
+              <button type="button" className="btn btn--secondary" onClick={() => setRejectModal(null)}>
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{ background: '#DC2626', border: '1px solid #DC2626' }}
+                onClick={() => handleAction(rejectModal.id, 'Rejected', rejectReason)}
+                disabled={actionLoading === rejectModal.id}
+              >
+                {actionLoading === rejectModal.id ? 'Menolak...' : '✕ Sahkan Tolak'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal Rekod Cuti ── */}
       {isModalOpen && (

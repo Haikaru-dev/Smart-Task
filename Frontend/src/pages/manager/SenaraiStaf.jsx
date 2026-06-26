@@ -3,16 +3,19 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
+import Pagination from '../../components/Pagination';
 
 export default function SenaraiStaf() {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
 
   // State untuk Modal Tambah Staf
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', role: '', status: 'Aktif' });
+  const [formData, setFormData] = useState({ name: '', role: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newAccountInfo, setNewAccountInfo] = useState(null); // { name, username }
 
   // State untuk Panel Detail Staf
   const [selectedStaff, setSelectedStaff] = useState(null);
@@ -59,14 +62,14 @@ export default function SenaraiStaf() {
   // Hantar borang Tambah Staf
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.role || !formData.status) return;
+    if (!formData.name || !formData.role) return;
 
     try {
       setIsSubmitting(true);
-      await axios.post(`${API_BASE_URL}/api/staff`, formData);
-      setIsModalOpen(false);
-      setFormData({ name: '', role: '', status: 'Aktif' }); // reset borang
-      fetchStaff(); // muat semula jadual
+      const response = await axios.post(`${API_BASE_URL}/api/staff`, formData);
+      setNewAccountInfo({ name: formData.name, username: response.data.username });
+      setFormData({ name: '', role: '' });
+      fetchStaff();
     } catch (err) {
       console.error('Ralat simpan staf:', err);
       alert('Gagal menambah staf. Sila pastikan backend sedang berjalan.');
@@ -75,7 +78,15 @@ export default function SenaraiStaf() {
     }
   };
 
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setNewAccountInfo(null);
+  };
+
   // ── JSON-LD Data ──
+  const PAGE_SIZE = 10;
+  const paginatedStaff = staff.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const jsonLdData = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -142,7 +153,7 @@ export default function SenaraiStaf() {
                   <td colSpan={3} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>Tiada staf direkodkan.</td>
                 </tr>
               ) : (
-                staff.map((s) => (
+                paginatedStaff.map((s) => (
                   <tr key={s.id}>
                     <td>
                       <div
@@ -169,6 +180,7 @@ export default function SenaraiStaf() {
             </tbody>
           </table>
         </div>
+        <Pagination total={staff.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
       </section>
 
       {/* ── Panel Detail Staf ── */}
@@ -232,66 +244,74 @@ export default function SenaraiStaf() {
           <div style={modalStyles.modal}>
             <div style={modalStyles.header}>
               <h2 style={modalStyles.title}>Tambah Staf Baharu</h2>
-              <button style={modalStyles.closeBtn} onClick={() => setIsModalOpen(false)}>×</button>
+              <button style={modalStyles.closeBtn} onClick={handleCloseModal}>×</button>
             </div>
-            
-            <form onSubmit={handleSubmit}>
-              <div style={modalStyles.body}>
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label className="form-label">Nama Penuh <span className="required">*</span></label>
-                  <input 
-                    type="text" 
-                    name="name" 
-                    className="form-input" 
-                    placeholder="Contoh: Ahmad Ali" 
-                    value={formData.name} 
-                    onChange={handleChange} 
-                    required 
-                  />
+
+            {newAccountInfo ? (
+              <>
+                <div style={modalStyles.body}>
+                  <p style={{ marginBottom: '12px', color: '#1E293B' }}>
+                    Staf <strong>{newAccountInfo.name}</strong> berjaya didaftarkan.
+                  </p>
+                  <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '8px', padding: '12px 16px', margin: '12px 0' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '14px' }}>Nama Pengguna: <code>{newAccountInfo.username}</code></p>
+                    <p style={{ margin: 0, fontSize: '14px' }}>Kata Laluan Lalai: <code>123</code></p>
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>
+                    Sila maklumkan maklumat log masuk ini kepada staf berkenaan.
+                  </p>
                 </div>
-                
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label className="form-label">Peranan / Fokus <span className="required">*</span></label>
-                  <select 
-                    name="role" 
-                    className="form-select" 
-                    value={formData.role} 
-                    onChange={handleChange} 
-                    required
-                  >
-                    <option value="" disabled>Pilih Peranan...</option>
-                    <option value="Designer">Designer</option>
-                    <option value="Operator Mesin (Banner/Bunting)">Operator Mesin (Banner/Bunting)</option>
-                    <option value="Operator Digital">Operator Digital</option>
-                    <option value="Finishing">Finishing</option>
-                    <option value="Pengurusan / Admin">Pengurusan / Admin</option>
-                  </select>
+                <div style={modalStyles.footer}>
+                  <button type="button" className="btn btn--primary" onClick={handleCloseModal}>
+                    Tutup
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div style={modalStyles.body}>
+                  <div className="form-group" style={{ marginBottom: '16px' }}>
+                    <label className="form-label">Nama Penuh <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      name="name"
+                      className="form-input"
+                      placeholder="Contoh: Ahmad Ali"
+                      value={formData.name}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Peranan / Fokus <span className="required">*</span></label>
+                    <select
+                      name="role"
+                      className="form-select"
+                      value={formData.role}
+                      onChange={handleChange}
+                      required
+                    >
+                      <option value="" disabled>Pilih Peranan...</option>
+                      <option value="Designer">Designer</option>
+                      <option value="Operator Mesin (Banner/Bunting)">Operator Mesin (Banner/Bunting)</option>
+                      <option value="Operator Digital">Operator Digital</option>
+                      <option value="Finishing">Finishing</option>
+                      <option value="Pengurusan / Admin">Pengurusan / Admin</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Status <span className="required">*</span></label>
-                  <select 
-                    name="status" 
-                    className="form-select" 
-                    value={formData.status} 
-                    onChange={handleChange} 
-                    required
-                  >
-                    <option value="Aktif">Aktif</option>
-                    <option value="Cuti">Cuti</option>
-                  </select>
+                <div style={modalStyles.footer}>
+                  <button type="button" className="btn btn--secondary" onClick={handleCloseModal}>
+                    Batal
+                  </button>
+                  <button type="submit" className="btn btn--primary" disabled={isSubmitting}>
+                    {isSubmitting ? 'Menyimpan...' : 'Simpan'}
+                  </button>
                 </div>
-              </div>
-              
-              <div style={modalStyles.footer}>
-                <button type="button" className="btn btn--secondary" onClick={() => setIsModalOpen(false)}>
-                  Batal
-                </button>
-                <button type="submit" className="btn btn--primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Menyimpan...' : 'Simpan'}
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}

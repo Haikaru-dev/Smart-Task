@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
+import Pagination from '../../components/Pagination';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const FolderIcon = () => (
@@ -80,6 +81,7 @@ export default function TugasanStaf() {
   const [tasks, setTasks]           = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
+  const [page, setPage]             = useState(1);
 
   // Modal kemaskini
   const [modalOpen, setModalOpen]   = useState(false);
@@ -113,6 +115,9 @@ export default function TugasanStaf() {
     t.status?.toLowerCase() === 'completed' || t.status?.toLowerCase() === 'done'
   ).length;
 
+  const PAGE_SIZE = 10;
+  const paginatedTasks = tasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const kpiCards = [
     { label: 'Tugasan Baru',    value: countNew,        cls: 'kpi-card kpi-card--blue',  Icon: FolderIcon,  footer: 'Menunggu tindakan anda' },
     { label: 'Sedang Proses',   value: countInProgress, cls: 'kpi-card kpi-card--amber', Icon: RefreshIcon, footer: 'Sedang dilaksanakan' },
@@ -133,26 +138,25 @@ export default function TugasanStaf() {
     setSaveMsg(null);
   };
 
-  // ── Hantar kemaskini (MVP: simpan nota dalam state sahaja) ──
+  // ── Hantar kemaskini status ke backend ──
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     setSaveMsg(null);
 
     try {
-      // MVP: hantar ke endpoint kemaskini jika ada, atau papar kejayaan
-      // Bila backend endpoint kemaskini status siap, gantikan dengan:
-      // await axios.patch(`${API_BASE_URL}/api/tasks/${activeTask.id}`, { status: form.status, staff_notes: form.notes });
-      await new Promise(r => setTimeout(r, 700)); // simulasi delay
+      await axios.patch(`${API_BASE_URL}/api/tasks/${activeTask.id}/status`, {
+        status: form.status
+      });
 
-      setSaveMsg({ type: 'success', text: 'Kemaskini berjaya disimpan!' });
-      // Kemas kini state tasks secara lokal
+      setSaveMsg({ type: 'success', text: 'Status tugasan berjaya dikemaskini!' });
       setTasks(prev => prev.map(t =>
-        t.id === activeTask.id ? { ...t, status: form.status, staff_notes: form.notes } : t
+        t.id === activeTask.id ? { ...t, status: form.status } : t
       ));
       setTimeout(closeModal, 1200);
     } catch (err) {
-      setSaveMsg({ type: 'error', text: 'Gagal menyimpan. Cuba semula.' });
+      const msg = err.response?.data?.error || 'Gagal menyimpan. Cuba semula.';
+      setSaveMsg({ type: 'error', text: msg });
     } finally {
       setSaving(false);
     }
@@ -295,7 +299,7 @@ export default function TugasanStaf() {
                   </td>
                 </tr>
               ) : (
-                tasks.map(task => {
+                paginatedTasks.map(task => {
                   const typeBadge   = getTaskTypeBadge(task.task_type);
                   const { style: stBadge, label: stLabel } = getTaskStatusBadge(task.status);
                   return (
@@ -364,6 +368,7 @@ export default function TugasanStaf() {
             </tbody>
           </table>
         </div>
+        <Pagination total={tasks.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
       </section>
 
       {/* ── Jadual Sejarah Permohonan ── */}

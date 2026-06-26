@@ -49,6 +49,15 @@ const WarningIcon = () => (
     <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
   </svg>
 );
+const KanbanIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
+  </svg>
+);
 
 // ── Helper functions ──────────────────────────────────────────────
 function getTypeBadge(type = '') {
@@ -107,6 +116,7 @@ const TASK_TYPES = ['Design', 'Printing', 'Packing', 'Delivery'];
 export default function JanaanJadual() {
   // ── State: papan agihan (DB) ──
   const [board, setBoard]               = useState([]);
+  const [viewMode, setViewMode]         = useState('staf'); // 'staf' | 'kanban'
   const [loading, setLoading]           = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -388,6 +398,16 @@ export default function JanaanJadual() {
     return acc;
   }, {});
   const staffColumns = Object.entries(grouped);
+
+  const STATUS_COLUMNS = [
+    { key: 'Pending',     label: 'Menunggu',     accent: '#D97706', badgeBg: '#FEF3C7', badgeColor: '#92400E' },
+    { key: 'In Progress', label: 'Dalam Proses', accent: '#2563EB', badgeBg: '#DBEAFE', badgeColor: '#1D4ED8' },
+    { key: 'Completed',   label: 'Selesai',      accent: '#16A34A', badgeBg: '#DCFCE7', badgeColor: '#15803D' },
+  ];
+  const kanbanGrouped = STATUS_COLUMNS.map(col => ({
+    ...col,
+    tasks: board.filter(t => (t.status || 'Pending') === col.key),
+  }));
 
   const kpiCards = [
     {
@@ -755,7 +775,29 @@ export default function JanaanJadual() {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="section-card-meta">Dikumpul mengikut staf</span>
+            <div style={{ display: 'flex', border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+              <button onClick={() => setViewMode('staf')} style={{
+                padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                border: 'none', display: 'flex', alignItems: 'center', gap: 5,
+                background: viewMode === 'staf' ? '#EFF6FF' : '#fff',
+                color: viewMode === 'staf' ? '#1D4ED8' : '#64748B',
+                borderRight: '1px solid #E2E8F0',
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                Mengikut Staf
+              </button>
+              <button onClick={() => setViewMode('kanban')} style={{
+                padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                border: 'none', display: 'flex', alignItems: 'center', gap: 5,
+                background: viewMode === 'kanban' ? '#EFF6FF' : '#fff',
+                color: viewMode === 'kanban' ? '#1D4ED8' : '#64748B',
+              }}>
+                <KanbanIcon /> Papan Kanban
+              </button>
+            </div>
             {hasDrafts && (
               <button className="btn btn--primary" onClick={handleConfirmAll}
                 disabled={isConfirming}
@@ -804,7 +846,7 @@ export default function JanaanJadual() {
                 : <><SparkleIcon /> Jana Cadangan AI</>}
             </button>
           </div>
-        ) : (
+        ) : viewMode === 'staf' ? (
           <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {staffColumns.map(([staffName, data], colIdx) => (
@@ -889,6 +931,64 @@ export default function JanaanJadual() {
                 </div>
               ))}
             </div>
+          </div>
+        ) : (
+          /* ── Papan Kanban — 3 lajur status ── */
+          <div style={{ padding: '20px 24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+              {kanbanGrouped.map(col => (
+                <div key={col.key} style={{ background: '#F8FAFC', borderRadius: 12,
+                  border: '1px solid #E8EDF3', overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 14px', background: '#fff',
+                    borderBottom: `3px solid ${col.accent}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{col.label}</div>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
+                      background: col.badgeBg, color: col.badgeColor }}>{col.tasks.length}</span>
+                  </div>
+                  <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 80 }}>
+                    {col.tasks.length === 0 ? (
+                      <div style={{ padding: '24px 0', textAlign: 'center', color: '#CBD5E1', fontSize: 12 }}>
+                        Tiada tugasan
+                      </div>
+                    ) : col.tasks.map(task => {
+                      const tb = getTypeBadge(task.task_type);
+                      const ab = getApprovalBadge(task.approval_status);
+                      return (
+                        <div key={task.id} style={{ borderRadius: 8, padding: '10px 12px',
+                          border: '1px solid #E8EDF3', background: '#fff',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4, marginBottom: 5 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
+                              background: tb.bg, color: tb.color, textTransform: 'uppercase' }}>{task.task_type}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                              background: ab.bg, color: ab.color, border: `1px solid ${ab.border}` }}>{ab.label}</span>
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 3 }}>
+                            {task.staff_name || '—'}
+                          </div>
+                          <p style={{ margin: '0 0 5px', fontSize: 11.5, color: '#64748B', lineHeight: 1.5,
+                            display: '-webkit-box', WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {task.description || '—'}
+                          </p>
+                          {task.order_number && (
+                            <div style={{ paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
+                              <span style={{ fontSize: 11, color: '#94A3B8' }}>
+                                📋 {task.order_number}{task.client_name ? ` · ${task.client_name}` : ''}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={{ marginTop: 12, fontSize: 12, color: '#94A3B8', textAlign: 'center' }}>
+              Kemaskini status tugasan dibuat oleh staf melalui portal mereka.
+            </p>
           </div>
         )}
       </section>

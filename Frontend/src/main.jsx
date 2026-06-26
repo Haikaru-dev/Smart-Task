@@ -13,16 +13,16 @@ axios.interceptors.request.use(config => {
   return config
 })
 
-// Redirect ke login jika token tamat tempoh (401)
-// PENTING: jangan redirect jika 401 datang dari endpoint login itu sendiri
+// Redirect ke login jika token tamat tempoh (401) atau akses ditolak (403)
 axios.interceptors.response.use(
   response => response,
   error => {
     const requestUrl = error.config?.url || ''
-    const is401 = error.response?.status === 401
+    const status = error.response?.status
+    const isAuthError = status === 401 || status === 403
     const isLoginEndpoint = requestUrl.includes('/api/login')
 
-    if (is401 && !isLoginEndpoint) {
+    if (isAuthError && !isLoginEndpoint) {
       const path = window.location.pathname
       localStorage.removeItem('authToken')
       if (path.startsWith('/staf')) {

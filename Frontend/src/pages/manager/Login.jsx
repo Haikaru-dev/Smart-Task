@@ -75,7 +75,7 @@ function Login() {
         password,
       });
 
-      const { role, userId, name, user, token } = response.data;
+      const { role, userId, staffId, name, user, token } = response.data;
 
       // Simpan JWT token untuk autentikasi API
       if (token) localStorage.setItem('authToken', token);
@@ -83,6 +83,7 @@ function Login() {
       // Simpan sesi pengguna dalam localStorage
       const sessionData = {
         id:       userId   || user?.id,
+        staffId:  staffId  || null,
         username: name     || user?.username || username,
         role:     role     || user?.role,
       };

@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
+import Pagination from '../../components/Pagination';
 
 // Helper: tentukan badge class dari status
 function getBadgeClass(status = '') {
@@ -26,6 +27,7 @@ export default function Tempahan() {
   // Modal state
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     async function fetchOrders() {
@@ -57,6 +59,9 @@ export default function Tempahan() {
   }
 
   // ── JSON-LD Data ──
+  const PAGE_SIZE = 10;
+  const paginatedOrders = orders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const jsonLdData = {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -137,7 +142,7 @@ export default function Tempahan() {
                   </td>
                 </tr>
               ) : (
-                orders.map((order) => (
+                paginatedOrders.map((order) => (
                   <tr key={order.id}>
                     <td>
                       <span className="td-id">{order.order_number}</span>
@@ -171,6 +176,7 @@ export default function Tempahan() {
             </tbody>
           </table>
         </div>
+        <Pagination total={orders.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
       </section>
 
       {/* ── Modal Dialog (Pop-up) ── */}

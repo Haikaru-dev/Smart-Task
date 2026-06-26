@@ -96,9 +96,10 @@ CREATE TABLE IF NOT EXISTS leaves (
     staff_id   INT  NOT NULL,
     start_date DATE NOT NULL,
     end_date   DATE NOT NULL,
-    reason     TEXT NULL,
-    status     ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
-    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reason           TEXT         NULL,
+    status           ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
+    rejection_reason VARCHAR(500) NULL,
+    applied_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_leaves_staff
         FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE

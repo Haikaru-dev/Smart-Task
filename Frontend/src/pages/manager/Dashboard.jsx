@@ -1,12 +1,13 @@
 // src/pages/Dashboard.jsx
-// ================================================================
-// PANTANG LARANG: Semua useState, useEffect, dan axios DIKEKALKAN.
-// Hanya bahagian JSX (return) dan CSS className yang diubah.
-// ================================================================
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
+import Pagination from '../../components/Pagination';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell
+} from 'recharts';
 
 // ── Ikon SVG inline (tiada dependency) ──
 const ClockIcon = () => (
@@ -35,6 +36,19 @@ const LeaveIcon = () => (
     <line x1="23" y1="11" x2="18" y2="16" />
   </svg>
 );
+const ProgressIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+const CalendarIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+);
 
 // ── Helper: dapatkan initials dari nama ──
 function getInitials(name = '') {
@@ -56,86 +70,72 @@ function getBadgeClass(status = '') {
 // ================================================================
 export default function Dashboard() {
 
-  // ── State (DIKEKALKAN — sama seperti kod asal anda) ──
-  const [stats, setStats] = useState({ pending: 0, completed: 0, activeStaff: 0, onLeave: 0 });
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // ── State ──
+  const [stats, setStats] = useState({
+    pending: 0, completed: 0, activeStaff: 0, onLeave: 0,
+    inProgress: 0, pendingLeaves: 0, completionRate: 0
+  });
+  const [auditLogs,     setAuditLogs]     = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState(null);
+  const [logsPage,      setLogsPage]      = useState(1);
+  const [orderTrends,   setOrderTrends]   = useState([]);
+  const [staffPerf,     setStaffPerf]     = useState([]);
+  const [leaveStats,    setLeaveStats]    = useState({ byStatus: [], pendingThisMonth: 0 });
+  const [chartsLoading, setChartsLoading] = useState(true);
 
-  // ── Data Fetching (DIKEKALKAN — logik axios tidak berubah) ──
+  // ── Data Fetching ──
   useEffect(() => {
     async function fetchDashboard() {
       try {
         setLoading(true);
 
-        // ── GANTIKAN URL dengan endpoint API anda yang sebenar ──
-        const [statsRes, logsRes] = await Promise.all([
+        const [statsRes, logsRes, trendsRes, perfRes, leaveRes] = await Promise.all([
           axios.get(`${API_BASE_URL}/api/dashboard/stats`),
           axios.get(`${API_BASE_URL}/api/dashboard/audit-logs`),
+          axios.get(`${API_BASE_URL}/api/dashboard/order-trends`),
+          axios.get(`${API_BASE_URL}/api/dashboard/staff-performance`),
+          axios.get(`${API_BASE_URL}/api/dashboard/leave-stats`),
         ]);
 
         setStats(statsRes.data);
         setAuditLogs(logsRes.data);
+        setOrderTrends(trendsRes.data);
+        setStaffPerf(perfRes.data);
+        setLeaveStats(leaveRes.data);
       } catch (err) {
         console.error('Dashboard fetch error:', err);
         setError('Gagal memuatkan data. Sila cuba semula.');
 
-        // ── Fallback data untuk development/demo ──
-        setStats({ pending: 12, completed: 45, activeStaff: 8, onLeave: 2 });
+        // Fallback data untuk development/demo
+        setStats({ pending: 12, completed: 45, activeStaff: 8, onLeave: 2,
+                   inProgress: 3, pendingLeaves: 2, completionRate: 68 });
         setAuditLogs([
-          {
-            id: 1,
-            time: '10:05 AM',
-            user: 'Staf Ali',
-            activity: "Menukar status Order #102 kepada 'Siap'",
-            status: 'Selesai',
-          },
-          {
-            id: 2,
-            time: '09:45 AM',
-            user: 'Admin',
-            activity: 'Meluluskan Cuti Staf Sarah',
-            status: 'Log',
-          },
+          { id: 1, time: '10:05 AM', user: 'Staf Ali',
+            activity: "Menukar status Order #102 kepada 'Siap'", status: 'Selesai' },
+          { id: 2, time: '09:45 AM', user: 'Admin',
+            activity: 'Meluluskan Cuti Staf Sarah', status: 'Log' },
         ]);
       } finally {
         setLoading(false);
+        setChartsLoading(false);
       }
     }
 
     fetchDashboard();
   }, []);
 
-  // ── KPI Card data (dibina dari state) ──
+  const LOGS_PAGE_SIZE = 5;
+  const paginatedLogs = auditLogs.slice((logsPage - 1) * LOGS_PAGE_SIZE, logsPage * LOGS_PAGE_SIZE);
+
+  // ── KPI Card data ──
   const kpiCards = [
-    {
-      label: 'Tempahan Pending',
-      value: stats.pending,
-      modifier: 'kpi-card--blue',
-      footer: '↑ Menunggu tindakan',
-      Icon: ClockIcon,
-    },
-    {
-      label: 'Tugasan Siap',
-      value: stats.completed,
-      modifier: 'kpi-card--green',
-      footer: '↑ Selesai minggu ini',
-      Icon: CheckIcon,
-    },
-    {
-      label: 'Staf Aktif',
-      value: stats.activeStaff,
-      modifier: 'kpi-card--cyan',
-      footer: 'Bertugas hari ini',
-      Icon: TeamIcon,
-    },
-    {
-      label: 'Staf Cuti',
-      value: stats.onLeave,
-      modifier: 'kpi-card--red',
-      footer: 'Perlu semakan',
-      Icon: LeaveIcon,
-    },
+    { label: 'Tempahan Pending',  value: stats.pending,       modifier: 'kpi-card--blue',   footer: '↑ Menunggu tindakan',                  Icon: ClockIcon    },
+    { label: 'Tugasan Siap',      value: stats.completed,     modifier: 'kpi-card--green',  footer: '↑ Selesai minggu ini',                 Icon: CheckIcon    },
+    { label: 'Staf Aktif',        value: stats.activeStaff,   modifier: 'kpi-card--cyan',   footer: 'Bertugas hari ini',                    Icon: TeamIcon     },
+    { label: 'Dalam Proses',      value: stats.inProgress,    modifier: 'kpi-card--amber',  footer: '← Sedang diproses',                   Icon: ProgressIcon },
+    { label: 'Staf Cuti',         value: stats.onLeave,       modifier: 'kpi-card--red',    footer: 'Perlu semakan',                        Icon: LeaveIcon    },
+    { label: 'Permohonan Cuti',   value: stats.pendingLeaves, modifier: 'kpi-card--purple', footer: `${stats.completionRate}% tugasan siap`, Icon: CalendarIcon },
   ];
 
   // ── Loading state ──
@@ -155,14 +155,8 @@ export default function Dashboard() {
     "@type": "WebPage",
     "name": "Admin Dashboard - SmartTask",
     "description": "Papan pemuka utama untuk pengurus memantau kpi, tempahan, staf aktif dan cuti staf.",
-    "audience": {
-      "@type": "Audience",
-      "audienceType": "Administrators and Managers"
-    },
-    "about": {
-      "@type": "SoftwareApplication",
-      "name": "SmartTask System"
-    }
+    "audience": { "@type": "Audience", "audienceType": "Administrators and Managers" },
+    "about": { "@type": "SoftwareApplication", "name": "SmartTask System" }
   };
 
   // ── RENDER ──
@@ -178,8 +172,9 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {/* ── KPI Cards ── */}
-      <section className="kpi-grid" aria-label="Ringkasan KPI">
+      {/* ── KPI Cards (6 cards, 3 per row) ── */}
+      <section className="kpi-grid" aria-label="Ringkasan KPI"
+        style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         {kpiCards.map((card) => (
           <article key={card.label} className={`kpi-card ${card.modifier}`}>
             <div className="kpi-top">
@@ -189,7 +184,6 @@ export default function Dashboard() {
             <div className="kpi-bottom">
               <div className="kpi-footer">{card.footer}</div>
             </div>
-            {/* Ikon latar belakang dekoratif */}
             <div className="kpi-bg-icon" aria-hidden="true">
               <card.Icon />
             </div>
@@ -197,10 +191,115 @@ export default function Dashboard() {
         ))}
       </section>
 
+      {/* ── Analitik: Trend Tempahan + Statistik Cuti (2-lajur) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 16, marginBottom: 20 }}>
+
+        {/* Trend Tempahan */}
+        <section className="section-card" aria-label="Trend Tempahan">
+          <header className="section-card-header">
+            <div className="section-card-title">
+              <div className="title-accent-dot" />
+              Trend Tempahan (6 Bulan)
+            </div>
+            <span className="section-card-meta">
+              {orderTrends.reduce((s, r) => s + r.total, 0)} tempahan
+            </span>
+          </header>
+          <div style={{ padding: '16px 20px' }}>
+            {orderTrends.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, padding: '40px 0', margin: 0 }}>
+                Tiada data tempahan 6 bulan lepas.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={orderTrends} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                  <XAxis dataKey="month_label" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="completed"   name="Siap"         fill="#16A34A" radius={[3,3,0,0]} />
+                  <Bar dataKey="in_progress" name="Dalam Proses" fill="#2563EB" radius={[3,3,0,0]} />
+                  <Bar dataKey="pending"     name="Menunggu"     fill="#D97706" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+
+        {/* Statistik Cuti */}
+        <section className="section-card" aria-label="Statistik Cuti">
+          <header className="section-card-header">
+            <div className="section-card-title">
+              <div className="title-accent-dot" style={{ background: '#7C3AED' }} />
+              Statistik Cuti
+            </div>
+            <span className="section-card-meta">
+              {leaveStats.pendingThisMonth} menunggu bulan ini
+            </span>
+          </header>
+          <div style={{ padding: '16px 20px' }}>
+            {leaveStats.byStatus.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, padding: '40px 0', margin: 0 }}>
+                Tiada rekod cuti.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={leaveStats.byStatus} dataKey="count" nameKey="status"
+                    cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3}>
+                    {leaveStats.byStatus.map(entry => (
+                      <Cell key={entry.status}
+                        fill={entry.status === 'Approved' ? '#16A34A'
+                            : entry.status === 'Pending'  ? '#D97706'
+                            : '#DC2626'} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* ── Analitik: Prestasi Staf (lebar penuh) ── */}
+      <section className="section-card" aria-label="Prestasi Staf" style={{ marginBottom: 20 }}>
+        <header className="section-card-header">
+          <div className="section-card-title">
+            <div className="title-accent-dot" style={{ background: '#059669' }} />
+            Prestasi Staf
+          </div>
+          <span className="section-card-meta">Tugasan per staf aktif</span>
+        </header>
+        <div style={{ padding: '16px 20px' }}>
+          {staffPerf.length === 0 && !chartsLoading ? (
+            <p style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, padding: '40px 0', margin: 0 }}>
+              Tiada data prestasi staf.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(200, staffPerf.length * 44)}>
+              <BarChart data={staffPerf} layout="vertical"
+                margin={{ top: 5, right: 20, left: 90, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={85} />
+                <Tooltip />
+                <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="completed"   name="Siap"         fill="#16A34A" stackId="a" />
+                <Bar dataKey="in_progress" name="Dalam Proses" fill="#2563EB" stackId="a" />
+                <Bar dataKey="pending"     name="Menunggu"     fill="#D97706" stackId="a"
+                  radius={[0,3,3,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </section>
+
       {/* ── Audit Log Section ── */}
       <section className="section-card" aria-label="Log Audit">
 
-        {/* Header */}
         <header className="section-card-header">
           <div className="section-card-title">
             <div className="title-accent-dot" />
@@ -212,7 +311,6 @@ export default function Dashboard() {
           <span className="section-card-meta">Dikemaskini: hari ini</span>
         </header>
 
-        {/* Error banner (jika ada) */}
         {error && (
           <div style={{
             padding: '10px 22px',
@@ -225,7 +323,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Table */}
         <table className="data-table">
           <thead>
             <tr>
@@ -243,33 +340,27 @@ export default function Dashboard() {
                 </td>
               </tr>
             ) : (
-              auditLogs.map((log) => (
+              paginatedLogs.map((log) => (
                 <tr key={log.id ?? log.time + log.user}>
-                  <td>
-                    <span className="td-mono">{log.time}</span>
-                  </td>
+                  <td><span className="td-mono">{log.time}</span></td>
                   <td>
                     <div className="user-cell">
-                      <div className="user-initials-circle">
-                        {getInitials(log.user)}
-                      </div>
+                      <div className="user-initials-circle">{getInitials(log.user)}</div>
                       <span>{log.user}</span>
                     </div>
                   </td>
                   <td>{log.activity}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <span className={`badge ${getBadgeClass(log.status)}`}>
-                      {log.status}
-                    </span>
+                    <span className={`badge ${getBadgeClass(log.status)}`}>{log.status}</span>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+        <Pagination total={auditLogs.length} page={logsPage} pageSize={LOGS_PAGE_SIZE} onChange={setLogsPage} />
 
       </section>
-      {/* ── Akhir Audit Log ── */}
 
     </div>
   );
