@@ -65,7 +65,6 @@ const NAV_ITEMS = [
         items: [
             { label: 'Dashboard', to: '/dashboard', icon: ICONS.dashboard },
             { label: 'Tempahan', to: '/tempahan', icon: ICONS.orders },
-            { label: 'Tempahan Baru', to: '/tempahan/baru', icon: ICONS.newOrder },
         ],
     },
     {
