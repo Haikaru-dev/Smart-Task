@@ -490,13 +490,13 @@ app.delete('/api/staff/:id', verifyToken, requireRole('Manager'), async (req, re
             return res.status(400).json({ error: "Tidak boleh memadam akaun kakitangan yang dipautkan kepada akaun anda sendiri." });
         }
 
-        // Padam rekod staff — FK CASCADE padam leaves, FK SET NULL nullkan tasks
-        await connection.query(`DELETE FROM staff WHERE id = ?`, [staffId]);
-
-        // Padam akaun login jika wujud
+        // Padam akaun login dahulu — jika proses terhenti, akaun tidak boleh digunakan lagi
         if (staffRow.user_id) {
             await connection.query(`DELETE FROM users WHERE id = ?`, [staffRow.user_id]);
         }
+
+        // Padam rekod staff — FK CASCADE padam leaves, FK SET NULL nullkan tasks
+        await connection.query(`DELETE FROM staff WHERE id = ?`, [staffId]);
 
         await connection.commit();
         res.status(200).json({ message: "Staf berjaya dipadam." });
