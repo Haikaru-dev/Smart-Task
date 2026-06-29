@@ -15,6 +15,10 @@ export default function DetailStaf() {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(true);
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting]       = useState(false);
+  const [deleteError, setDeleteError]     = useState(null);
+
   useEffect(() => {
     async function fetchStaffDetail() {
       try {
@@ -45,6 +49,20 @@ export default function DetailStaf() {
     fetchStaffDetail();
     fetchStaffTasks();
   }, [id]);
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      setDeleteError(null);
+      await axios.delete(`${API_BASE_URL}/api/staff/${id}`);
+      navigate('/staf');
+    } catch (err) {
+      console.error('Ralat memadam staf:', err);
+      setDeleteError('Gagal memadam staf. Sila cuba semula.');
+      setIsDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
 
   if (loading) {
     return <div className="page-content"><div style={{ textAlign: 'center', padding: '50px', color: '#64748B' }}>Memuatkan profil staf...</div></div>;
@@ -106,13 +124,42 @@ export default function DetailStaf() {
           </span>
 
           <div style={{ width: '100%', marginTop: 'auto', borderTop: '1px solid #E2E8F0', paddingTop: '24px' }}>
-            <button 
-              className="btn btn--secondary" 
-              style={{ width: '100%', color: '#DC2626', borderColor: '#FECACA', background: '#FEF2F2' }}
-              onClick={() => alert('Fungsi padam belum diaktifkan.')}
-            >
-              Padam Staf
-            </button>
+            {deleteError && (
+              <p style={{ fontSize: '12px', color: '#DC2626', marginBottom: '8px', textAlign: 'center' }}>
+                {deleteError}
+              </p>
+            )}
+            {confirmDelete ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <p style={{ fontSize: '12px', color: '#DC2626', fontWeight: '600', margin: '0 0 4px', textAlign: 'center' }}>
+                  Anda pasti ingin memadam staf ini?
+                </p>
+                <button
+                  className="btn btn--secondary"
+                  style={{ width: '100%', color: '#DC2626', borderColor: '#FECACA', background: '#FEF2F2' }}
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? 'Memadam...' : 'Ya, Padam Staf'}
+                </button>
+                <button
+                  className="btn btn--secondary"
+                  style={{ width: '100%' }}
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={isDeleting}
+                >
+                  Batal
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn btn--secondary"
+                style={{ width: '100%', color: '#DC2626', borderColor: '#FECACA', background: '#FEF2F2' }}
+                onClick={() => setConfirmDelete(true)}
+              >
+                Padam Staf
+              </button>
+            )}
           </div>
         </aside>
 
