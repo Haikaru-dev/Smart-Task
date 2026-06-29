@@ -437,6 +437,10 @@ body {
     background: linear-gradient(145deg, #4C1D95 0%, #7C3AED 55%, #8B5CF6 100%);
 }
 
+.kpi-card--neutral {
+    background: linear-gradient(145deg, #334155 0%, #475569 55%, #64748B 100%);
+}
+
 .kpi-top {
     position: relative;
     z-index: 1;

@@ -48,17 +48,8 @@ const UserOffIcon = () => (
 // ================================================================
 export default function Cuti() {
   const [leaves, setLeaves]       = useState([]);
-  const [staffList, setStaffList] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
-
-  // Modal state (rekod cuti baru)
-  const [isModalOpen, setIsModalOpen]   = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitMsg, setSubmitMsg]       = useState(null);
-  const [formData, setFormData]         = useState({
-    staff_id: '', start_date: '', end_date: '', reason: ''
-  });
 
   // Approve / Reject state
   const [actionLoading, setActionLoading] = useState(null);
@@ -83,20 +74,8 @@ export default function Cuti() {
     }
   }
 
-  // ── Ambil senarai staf untuk dropdown ──
-  async function fetchStaff() {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/staff`);
-      const data = res.data.data || res.data;
-      setStaffList(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Ralat mengambil senarai staf:', err);
-    }
-  }
-
   useEffect(() => {
     fetchLeaves();
-    fetchStaff();
   }, []);
 
   // ── Statistik kad ──
@@ -134,39 +113,6 @@ export default function Cuti() {
     }
   };
 
-  // ── Handle input borang ──
-  const handleChange = (e) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  // ── Handle submit ──
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const { staff_id, start_date, end_date, reason } = formData;
-    if (!staff_id || !start_date || !end_date || !reason) return;
-
-    try {
-      setIsSubmitting(true);
-      setSubmitMsg(null);
-      await axios.post(`${API_BASE_URL}/api/leaves`, { staff_id, start_date, end_date, reason });
-      setSubmitMsg({ type: 'success', text: 'Cuti berjaya direkodkan!' });
-      setFormData({ staff_id: '', start_date: '', end_date: '', reason: '' });
-      fetchLeaves();
-      setTimeout(() => { setIsModalOpen(false); setSubmitMsg(null); }, 1500);
-    } catch (err) {
-      console.error('Ralat merekod cuti:', err);
-      setSubmitMsg({ type: 'error', text: 'Gagal merekod cuti. Semak sambungan backend.' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSubmitMsg(null);
-    setFormData({ staff_id: '', start_date: '', end_date: '', reason: '' });
-  };
-
   const PAGE_SIZE = 10;
   const paginatedLeaves = leaves.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -181,17 +127,11 @@ export default function Cuti() {
     <div className="page-content">
 
       {/* ── Page Header ── */}
-      <header className="page-header flex-between">
+      <header className="page-header">
         <div>
           <h1 className="page-title">Pengurusan Cuti</h1>
           <p className="page-subtitle">Rekod dan pantau permohonan cuti staf</p>
         </div>
-        <button className="btn btn--primary" id="btn-rekod-cuti" onClick={() => setIsModalOpen(true)}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" style={{ marginRight: 6 }}>
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Rekod Cuti
-        </button>
       </header>
 
       {/* ── KPI Cards ── */}
@@ -369,126 +309,6 @@ export default function Cuti() {
                 {actionLoading === rejectModal.id ? 'Menolak...' : '✕ Sahkan Tolak'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal Rekod Cuti ── */}
-      {isModalOpen && (
-        <div style={modalStyles.overlay} onClick={(e) => e.target === e.currentTarget && closeModal()}>
-          <div style={modalStyles.modal}>
-
-            {/* Header */}
-            <div style={modalStyles.header}>
-              <div>
-                <h2 style={modalStyles.title}>Rekod Cuti Baharu</h2>
-                <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', marginTop: 2 }}>
-                  Lengkapkan maklumat di bawah
-                </p>
-              </div>
-              <button style={modalStyles.closeBtn} onClick={closeModal} aria-label="Tutup">×</button>
-            </div>
-
-            {/* Body */}
-            <form onSubmit={handleSubmit}>
-              <div style={modalStyles.body}>
-
-                {/* Nama Staf */}
-                <div style={modalStyles.formGroup}>
-                  <label style={modalStyles.label}>
-                    Nama Staf <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <select
-                    name="staff_id"
-                    id="cuti-staff-id"
-                    style={modalStyles.input}
-                    value={formData.staff_id}
-                    onChange={handleChange}
-                    required
-                  >
-                    <option value="" disabled>— Pilih Staf —</option>
-                    {staffList.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Tarikh Mula & Tamat (2 kolum) */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
-                  <div>
-                    <label style={modalStyles.label}>
-                      Tarikh Mula <span style={{ color: '#EF4444' }}>*</span>
-                    </label>
-                    <input
-                      type="date"
-                      name="start_date"
-                      id="cuti-start-date"
-                      style={modalStyles.input}
-                      value={formData.start_date}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={modalStyles.label}>
-                      Tarikh Tamat <span style={{ color: '#EF4444' }}>*</span>
-                    </label>
-                    <input
-                      type="date"
-                      name="end_date"
-                      id="cuti-end-date"
-                      style={modalStyles.input}
-                      value={formData.end_date}
-                      min={formData.start_date}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Sebab */}
-                <div style={modalStyles.formGroup}>
-                  <label style={modalStyles.label}>
-                    Sebab / Nota <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <textarea
-                    name="reason"
-                    id="cuti-reason"
-                    style={{ ...modalStyles.input, minHeight: 90, resize: 'vertical' }}
-                    placeholder="Contoh: Cuti Sakit — demam selama 2 hari"
-                    value={formData.reason}
-                    onChange={handleChange}
-                    required
-                  />
-                  <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
-                    Sertakan jenis cuti dan sebab ringkas dalam ruangan ini.
-                  </p>
-                </div>
-
-                {/* Mesej status submit */}
-                {submitMsg && (
-                  <div style={{
-                    padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500,
-                    background: submitMsg.type === 'success' ? '#DCFCE7' : '#FEF2F2',
-                    color: submitMsg.type === 'success' ? '#15803D' : '#B91C1C',
-                    border: `1px solid ${submitMsg.type === 'success' ? '#86EFAC' : '#FCA5A5'}`
-                  }}>
-                    {submitMsg.type === 'success' ? '✓' : '⚠'} {submitMsg.text}
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div style={modalStyles.footer}>
-                <button type="button" className="btn btn--secondary" onClick={closeModal}>
-                  Batal
-                </button>
-                <button type="submit" className="btn btn--primary" disabled={isSubmitting} id="btn-submit-cuti">
-                  {isSubmitting ? 'Menyimpan...' : 'Simpan Rekod'}
-                </button>
-              </div>
-            </form>
-
           </div>
         </div>
       )}

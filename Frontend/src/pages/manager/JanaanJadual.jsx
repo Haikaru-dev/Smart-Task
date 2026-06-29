@@ -903,27 +903,55 @@ export default function JanaanJadual() {
         ) : viewMode === 'staf' ? (
           <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {staffColumns.map(([staffName, data], colIdx) => (
-                <div key={staffName} style={{ background: '#F8FAFC', borderRadius: 12,
-                  border: '1px solid #E8EDF3', overflow: 'hidden' }}>
-                  {/* Kolum header */}
-                  <div style={{ padding: '12px 14px', background: '#fff',
-                    borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                      background: STAFF_COLORS[colIdx % STAFF_COLORS.length],
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, fontWeight: 700, color: '#fff'
-                    }}>{getInitials(staffName)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{staffName}</div>
-                      <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{data.role || 'Staf'}</div>
+              {staffColumns.map(([staffName, data], colIdx) => {
+                const confirmedTasks  = data.tasks.filter(t => t.approval_status === 'Confirmed');
+                const jumlahConfirmed = confirmedTasks.length;
+                const siapCount       = confirmedTasks.filter(t => t.status === 'Completed').length;
+                const peratusSiap     = jumlahConfirmed > 0 ? (siapCount / jumlahConfirmed) * 100 : null;
+
+                const colBg     = peratusSiap === null ? '#F8FAFC'
+                                : peratusSiap >= 90    ? '#DCFCE7'
+                                : peratusSiap >= 50    ? '#FEF3C7'
+                                : '#FEE2E2';
+                const colBorder = peratusSiap === null ? '#E8EDF3'
+                                : peratusSiap >= 90    ? '#86EFAC'
+                                : peratusSiap >= 50    ? '#FDE68A'
+                                : '#FCA5A5';
+                const isRed = peratusSiap !== null && peratusSiap < 50;
+
+                return (
+                  <div key={staffName}
+                    style={{
+                      background: colBg, borderRadius: 12,
+                      border: `1px solid ${colBorder}`, overflow: 'hidden',
+                      ...(isRed ? { cursor: 'pointer' } : {}),
+                    }}
+                    title={isRed ? 'Klik untuk lihat papan kanban' : undefined}
+                    onClick={isRed ? () => setViewMode('kanban') : undefined}
+                  >
+                    {/* Kolum header */}
+                    <div style={{ padding: '12px 14px', background: '#fff',
+                      borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                        background: STAFF_COLORS[colIdx % STAFF_COLORS.length],
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 13, fontWeight: 700, color: '#fff'
+                      }}>{getInitials(staffName)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{staffName}</div>
+                        <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{data.role || 'Staf'}</div>
+                      </div>
+                      <span style={{ background: '#EFF6FF', color: '#1D4ED8', fontSize: 11,
+                        fontWeight: 700, padding: '3px 9px', borderRadius: 20 }}>
+                        {data.tasks.length}
+                      </span>
+                      {peratusSiap !== null && (
+                        <span style={{ fontSize: 10, color: '#64748B', fontWeight: 500 }}>
+                          {Math.round(peratusSiap)}% siap
+                        </span>
+                      )}
                     </div>
-                    <span style={{ background: '#EFF6FF', color: '#1D4ED8', fontSize: 11,
-                      fontWeight: 700, padding: '3px 9px', borderRadius: 20 }}>
-                      {data.tasks.length}
-                    </span>
-                  </div>
                   {/* Senarai kad */}
                   <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {data.tasks.map(task => {
@@ -983,7 +1011,8 @@ export default function JanaanJadual() {
                     })}
                   </div>
                 </div>
-              ))}
+              ); })}
+
             </div>
           </div>
         ) : (

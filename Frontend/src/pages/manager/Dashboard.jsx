@@ -1,5 +1,6 @@
 // src/pages/Dashboard.jsx
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
@@ -84,6 +85,8 @@ export default function Dashboard() {
   const [leaveStats,    setLeaveStats]    = useState({ byStatus: [], pendingThisMonth: 0 });
   const [chartsLoading, setChartsLoading] = useState(true);
 
+  const navigate = useNavigate();
+
   // ── Data Fetching ──
   useEffect(() => {
     async function fetchDashboard() {
@@ -120,13 +123,22 @@ export default function Dashboard() {
 
   // ── KPI Card data ──
   const kpiCards = [
-    { label: 'Tempahan Pending',  value: stats.pending,       modifier: 'kpi-card--blue',   footer: '↑ Menunggu tindakan',                  Icon: ClockIcon    },
-    { label: 'Tugasan Siap',      value: stats.completed,     modifier: 'kpi-card--green',  footer: '↑ Selesai minggu ini',                 Icon: CheckIcon    },
-    { label: 'Staf Aktif',        value: stats.activeStaff,   modifier: 'kpi-card--cyan',   footer: 'Bertugas hari ini',                    Icon: TeamIcon     },
-    { label: 'Dalam Proses',      value: stats.inProgress,    modifier: 'kpi-card--amber',  footer: '← Sedang diproses',                   Icon: ProgressIcon },
-    { label: 'Staf Cuti',         value: stats.onLeave,       modifier: 'kpi-card--red',    footer: 'Perlu semakan',                        Icon: LeaveIcon    },
-    { label: 'Permohonan Cuti',   value: stats.pendingLeaves, modifier: 'kpi-card--purple', footer: `${stats.completionRate}% tugasan siap`, Icon: CalendarIcon },
+    { label: 'Tempahan Pending',  value: stats.pending,       modifier: 'kpi-card--blue',    footer: '↑ Menunggu tindakan',                  Icon: ClockIcon    },
+    { label: 'Tugasan Siap',      value: stats.completed,     modifier: 'kpi-card--green',   footer: '↑ Selesai minggu ini',                 Icon: CheckIcon    },
+    { label: 'Staf Aktif',        value: stats.activeStaff,   modifier: 'kpi-card--neutral', footer: 'Bertugas hari ini',                    Icon: TeamIcon     },
+    { label: 'Dalam Proses',      value: stats.inProgress,    modifier: 'kpi-card--amber',   footer: '← Sedang diproses',                   Icon: ProgressIcon },
+    { label: 'Staf Cuti',         value: stats.onLeave,       modifier: 'kpi-card--neutral', footer: 'Perlu semakan',                        Icon: LeaveIcon    },
+    { label: 'Permohonan Cuti',   value: stats.pendingLeaves, modifier: 'kpi-card--purple',  footer: `${stats.completionRate}% tugasan siap`, Icon: CalendarIcon,
+      navigateTo: '/cuti' },
   ];
+
+  const completionDonutData = [
+    { name: 'Tugasan Siap', value: stats.completionRate },
+    { name: 'Baki', value: Math.max(0, 100 - stats.completionRate) },
+  ];
+  const donutColor = stats.completionRate >= 90 ? '#16A34A'
+                   : stats.completionRate >= 50 ? '#D97706'
+                   : '#DC2626';
 
   // ── Loading state ──
   if (loading) {
@@ -166,7 +178,12 @@ export default function Dashboard() {
       <section className="kpi-grid" aria-label="Ringkasan KPI"
         style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         {kpiCards.map((card) => (
-          <article key={card.label} className={`kpi-card ${card.modifier}`}>
+          <article
+            key={card.label}
+            className={`kpi-card ${card.modifier}`}
+            onClick={card.navigateTo ? () => navigate(card.navigateTo) : undefined}
+            style={{ position: 'relative', ...(card.navigateTo ? { cursor: 'pointer' } : {}) }}
+          >
             <div className="kpi-top">
               <h3 className="kpi-label">{card.label}</h3>
               <div className="kpi-value">{card.value}</div>
@@ -177,6 +194,13 @@ export default function Dashboard() {
             <div className="kpi-bg-icon" aria-hidden="true">
               <card.Icon />
             </div>
+            {card.navigateTo && stats.pendingLeaves > 0 && (
+              <span style={{
+                position: 'absolute', top: 10, right: 10,
+                width: 10, height: 10, borderRadius: '50%',
+                background: '#DC2626', border: '2px solid rgba(255,255,255,0.5)',
+              }} />
+            )}
           </article>
         ))}
       </section>
@@ -253,6 +277,46 @@ export default function Dashboard() {
           </div>
         </section>
       </div>
+
+      {/* ── Progress Keseluruhan Tugasan ── */}
+      <section className="section-card" aria-label="Progress Tugasan" style={{ marginBottom: 20 }}>
+        <header className="section-card-header">
+          <div className="section-card-title">
+            <div className="title-accent-dot" style={{ background: donutColor }} />
+            Progress Keseluruhan Tugasan
+          </div>
+          <span className="section-card-meta">
+            {stats.completionRate}% daripada tugasan Confirmed
+          </span>
+        </header>
+        <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'center' }}>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie
+                data={completionDonutData}
+                dataKey="value"
+                cx="50%" cy="50%"
+                innerRadius={65} outerRadius={100}
+                paddingAngle={3}
+                startAngle={90} endAngle={-270}
+              >
+                <Cell fill={donutColor} />
+                <Cell fill="#E2E8F0" />
+              </Pie>
+              <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle"
+                style={{ fontSize: 28, fontWeight: 700, fill: donutColor }}>
+                {stats.completionRate}%
+              </text>
+              <text x="50%" y="58%" textAnchor="middle" dominantBaseline="middle"
+                style={{ fontSize: 11, fill: '#94A3B8' }}>
+                Tugasan Siap
+              </text>
+              <Tooltip formatter={(val) => `${val}%`} />
+              <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
 
       {/* ── Analitik: Prestasi Staf (lebar penuh) ── */}
       <section className="section-card" aria-label="Prestasi Staf" style={{ marginBottom: 20 }}>
