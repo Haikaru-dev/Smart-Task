@@ -155,7 +155,7 @@ export default function DetailStaf() {
               <button
                 className="btn btn--secondary"
                 style={{ width: '100%', color: '#DC2626', borderColor: '#FECACA', background: '#FEF2F2' }}
-                onClick={() => setConfirmDelete(true)}
+                onClick={() => { setConfirmDelete(true); setDeleteError(null); }}
               >
                 Padam Staf
               </button>

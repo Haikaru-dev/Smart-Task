@@ -484,6 +484,12 @@ app.delete('/api/staff/:id', verifyToken, requireRole('Manager'), async (req, re
             return res.status(404).json({ error: "Staf tidak dijumpai." });
         }
 
+        // Halang admin memadam akaun sendiri
+        if (staffRow.user_id && staffRow.user_id === req.user.userId) {
+            await connection.rollback();
+            return res.status(400).json({ error: "Tidak boleh memadam akaun kakitangan yang dipautkan kepada akaun anda sendiri." });
+        }
+
         // Padam rekod staff — FK CASCADE padam leaves, FK SET NULL nullkan tasks
         await connection.query(`DELETE FROM staff WHERE id = ?`, [staffId]);
 
