@@ -22,7 +22,6 @@ function getBadgeClass(status = '') {
 
 export default function Tempahan() {
   const navigate = useNavigate();
-  const [hoveredRow, setHoveredRow] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -160,13 +159,10 @@ export default function Tempahan() {
                   <tr
                     key={order.id}
                     onClick={() => handleOpenModal(order)}
-                    onMouseEnter={() => setHoveredRow(order.id)}
-                    onMouseLeave={() => setHoveredRow(null)}
-                    style={{
-                      cursor: 'pointer',
-                      backgroundColor: hoveredRow === order.id ? '#F8FAFC' : 'transparent',
-                      transition: 'background-color 0.15s',
-                    }}
+                    tabIndex={0}
+                    role="button"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenModal(order); } }}
+                    style={{ cursor: 'pointer' }}
                   >
                     <td>
                       <span className="td-id">{order.order_number}</span>
@@ -196,8 +192,8 @@ export default function Tempahan() {
 
       {/* ── Modal Dialog (Pop-up) ── */}
       {isModalOpen && selectedOrder && (
-        <div style={modalStyles.overlay}>
-          <div style={modalStyles.modal}>
+        <div style={modalStyles.overlay} onClick={handleCloseModal}>
+          <div style={modalStyles.modal} onClick={(e) => e.stopPropagation()}>
             
             {/* Header Modal */}
             <div style={modalStyles.header}>
