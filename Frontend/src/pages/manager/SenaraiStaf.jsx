@@ -165,7 +165,12 @@ export default function SenaraiStaf() {
                         <div className="user-initials-circle">
                           {s.name.substring(0, 2).toUpperCase()}
                         </div>
-                        <span style={{ fontWeight: 500, color: '#1E293B' }}>{s.name}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 500, color: '#1E293B' }}>{s.name}</span>
+                          {s.username && (
+                            <span style={{ fontSize: '11px', color: '#94A3B8', fontFamily: 'monospace' }}>{s.username}</span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td>{s.role}</td>
@@ -219,8 +224,8 @@ export default function SenaraiStaf() {
                     { label: 'Peranan / Jawatan', value: selectedStaff.role || '-' },
                     { label: 'Emel Rasmi',        value: selectedStaff.email || '-' },
                     { label: 'No. Telefon',       value: selectedStaff.phone_number || '-' },
-                    { label: 'Status Pekerja',    value: null, badge: selectedStaff.status },
-                    { label: 'ID Sistem',         value: `#${selectedStaff.id}` },
+                    { label: 'Status Pekerja',      value: null, badge: selectedStaff.status },
+                    { label: 'Nama Pengguna (Login)', value: selectedStaff.username || '-' },
                   ].map(({ label, value, badge }) => (
                     <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={detailPanelStyles.infoLabel}>{label}</span>

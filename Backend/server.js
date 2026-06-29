@@ -377,7 +377,7 @@ app.get('/api/dashboard/leave-stats', verifyToken, requireRole('Manager'), async
 // Endpoint untuk mendapatkan senarai staf
 app.get('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
-        const sql = `SELECT id, full_name AS name, job_title AS role, status FROM staff ORDER BY full_name ASC`;
+        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.full_name ASC`;
         const [results] = await db.query(sql);
         res.status(200).json(results);
     } catch (err) {
@@ -456,7 +456,7 @@ app.post('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => 
 app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staffId = req.params.id;
-        const sql = `SELECT id, full_name AS name, job_title AS role, status, email, phone_number FROM staff WHERE id = ?`;
+        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, s.email, s.phone_number, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`;
         const [results] = await db.query(sql, [staffId]);
         if (results.length === 0) {
             return res.status(404).json({ message: "Staf tidak dijumpai" });

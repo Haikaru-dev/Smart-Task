@@ -97,8 +97,8 @@ export default function DetailStaf() {
             {staff.name}
           </h2>
           
-          <p style={{ fontSize: '13px', color: '#64748B', fontWeight: '600', marginBottom: '16px', margin: 0 }}>
-            ID: {staffIdCode}
+          <p style={{ fontSize: '13px', color: '#64748B', fontWeight: '600', marginBottom: '16px', margin: 0, fontFamily: 'monospace' }}>
+            {staff.username || staffIdCode}
           </p>
 
           <span className="badge badge--info" style={{ padding: '6px 14px', fontSize: '13px', marginBottom: '32px' }}>
@@ -151,8 +151,8 @@ export default function DetailStaf() {
                   </div>
                 </div>
                 <div style={styles.infoBox}>
-                  <div style={styles.label}>User ID (Sistem)</div>
-                  <div style={styles.value}>#{staff.id}</div>
+                  <div style={styles.label}>Nama Pengguna (Login)</div>
+                  <div style={{ ...styles.value, fontFamily: 'monospace' }}>{staff.username || '-'}</div>
                 </div>
               </div>
             </div>
