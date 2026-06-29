@@ -927,6 +927,8 @@ export default function JanaanJadual() {
                       ...(isRed ? { cursor: 'pointer' } : {}),
                     }}
                     title={isRed ? 'Klik untuk lihat papan kanban' : undefined}
+                    tabIndex={isRed ? 0 : undefined}
+                    onKeyDown={isRed ? (e) => { if (e.key === 'Enter') setViewMode('kanban'); } : undefined}
                     onClick={isRed ? () => setViewMode('kanban') : undefined}
                   >
                     {/* Kolum header */}
@@ -960,7 +962,7 @@ export default function JanaanJadual() {
                       const ab      = getApprovalBadge(task.approval_status);
                       const isDraft = task.approval_status === 'Draft';
                       return (
-                        <div key={task.id} onClick={() => handleEditTask(task)}
+                        <div key={task.id} onClick={(e) => { e.stopPropagation(); handleEditTask(task); }}
                           style={{
                             borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
                             border: isDraft ? '1px solid #FCD34D' : '1px solid #E8EDF3',

@@ -339,8 +339,6 @@ const modalStyles = {
     background: 'transparent', border: 'none', fontSize: 26,
     color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: '0 4px',
   },
-  body: { padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 0 },
-  formGroup: { marginBottom: 16 },
   label: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 },
   input: {
     width: '100%', padding: '9px 12px', fontSize: 13, border: '1px solid #D1D5DB',
