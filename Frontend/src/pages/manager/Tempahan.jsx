@@ -4,6 +4,7 @@
 // Logik: useEffect untuk ambil data (axios.get), paparkan di jadual, buka Modal
 // ================================================================
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
@@ -20,6 +21,8 @@ function getBadgeClass(status = '') {
 }
 
 export default function Tempahan() {
+  const navigate = useNavigate();
+  const [hoveredRow, setHoveredRow] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -86,6 +89,18 @@ export default function Tempahan() {
           <h1 className="page-title">Senarai Tempahan</h1>
           <p className="page-subtitle">Pantau dan urus semua tempahan pelanggan</p>
         </div>
+        <button
+          className="btn btn--primary"
+          onClick={() => navigate('/tempahan/baru')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+            style={{ marginRight: 6 }}>
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Tambah Tempahan
+        </button>
       </header>
 
       {/* Paparan Ralat */}
@@ -125,25 +140,34 @@ export default function Tempahan() {
                 <th>Jenis Item</th>
                 <th>Tarikh Siap</th>
                 <th>Status</th>
-                <th style={{ textAlign: 'center' }}>Tindakan</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
                     Memuatkan data...
                   </td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
                     Tiada rekod tempahan dijumpai.
                   </td>
                 </tr>
               ) : (
                 paginatedOrders.map((order) => (
-                  <tr key={order.id}>
+                  <tr
+                    key={order.id}
+                    onClick={() => handleOpenModal(order)}
+                    onMouseEnter={() => setHoveredRow(order.id)}
+                    onMouseLeave={() => setHoveredRow(null)}
+                    style={{
+                      cursor: 'pointer',
+                      backgroundColor: hoveredRow === order.id ? '#F8FAFC' : 'transparent',
+                      transition: 'background-color 0.15s',
+                    }}
+                  >
                     <td>
                       <span className="td-id">{order.order_number}</span>
                     </td>
@@ -160,15 +184,6 @@ export default function Tempahan() {
                       <span className={`badge ${getBadgeClass(order.status)}`}>
                         {order.status || 'Pending'}
                       </span>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button 
-                        className="btn btn--secondary btn--sm"
-                        onClick={() => handleOpenModal(order)}
-                        style={{ fontSize: '11.5px', padding: '5px 12px' }}
-                      >
-                        Lihat Detail
-                      </button>
                     </td>
                   </tr>
                 ))
