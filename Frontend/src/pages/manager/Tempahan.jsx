@@ -160,7 +160,7 @@ export default function Tempahan() {
                     key={order.id}
                     onClick={() => handleOpenModal(order)}
                     tabIndex={0}
-                    aria-label={`Lihat perincian tempahan ${order.order_number}`}
+                    aria-label={`Lihat perincian tempahan ${order.order_number ?? '-'}`}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenModal(order); } }}
                     style={{ cursor: 'pointer' }}
                   >
