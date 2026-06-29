@@ -468,6 +468,41 @@ app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (r
     }
 });
 
+// Endpoint untuk padam staf dan akaun login berkaitan
+app.delete('/api/staff/:id', verifyToken, requireRole('Manager'), async (req, res) => {
+    const staffId = req.params.id;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // Ambil user_id sebelum padam (untuk padam akaun login selepas)
+        const [[staffRow]] = await connection.query(
+            `SELECT user_id FROM staff WHERE id = ?`, [staffId]
+        );
+        if (!staffRow) {
+            await connection.rollback();
+            return res.status(404).json({ error: "Staf tidak dijumpai." });
+        }
+
+        // Padam rekod staff — FK CASCADE padam leaves, FK SET NULL nullkan tasks
+        await connection.query(`DELETE FROM staff WHERE id = ?`, [staffId]);
+
+        // Padam akaun login jika wujud
+        if (staffRow.user_id) {
+            await connection.query(`DELETE FROM users WHERE id = ?`, [staffRow.user_id]);
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: "Staf berjaya dipadam." });
+    } catch (err) {
+        await connection.rollback();
+        console.error("Ralat DELETE /api/staff/:id:", err);
+        res.status(500).json({ error: "Gagal memadam staf." });
+    } finally {
+        connection.release();
+    }
+});
+
 // Endpoint untuk mendapatkan semua rekod cuti
 app.get('/api/leaves', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
