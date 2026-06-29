@@ -529,6 +529,14 @@ app.get('/api/leaves', verifyToken, requireRole('Manager'), async (req, res) => 
 app.post('/api/leaves', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const { staff_id, start_date, end_date, reason } = req.body;
+
+        if (!staff_id || !start_date || !end_date || !reason) {
+            return res.status(400).json({ error: "Semua medan wajib diisi: staff_id, start_date, end_date, reason." });
+        }
+        if (new Date(end_date) < new Date(start_date)) {
+            return res.status(400).json({ error: "Tarikh tamat tidak boleh lebih awal daripada tarikh mula." });
+        }
+
         const sql = `INSERT INTO Leaves (staff_id, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, 'Pending')`;
         const [result] = await db.query(sql, [staff_id, start_date, end_date, reason]);
         res.status(201).json({ message: "Cuti berjaya direkodkan!", leaveId: result.insertId });

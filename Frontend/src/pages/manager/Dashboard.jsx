@@ -133,7 +133,7 @@ export default function Dashboard() {
   ];
 
   const completionDonutData = [
-    { name: 'Tugasan Siap', value: stats.completionRate },
+    { name: 'Tugasan Siap', value: Math.min(100, Math.max(0, stats.completionRate)) },
     { name: 'Baki', value: Math.max(0, 100 - stats.completionRate) },
   ];
   const donutColor = stats.completionRate >= 90 ? '#16A34A'

@@ -118,6 +118,7 @@ export default function JanaanJadual() {
   // ── State: papan agihan (DB) ──
   const [board, setBoard]               = useState([]);
   const [viewMode, setViewMode]         = useState('staf'); // 'staf' | 'kanban'
+  const [kanbanStaffFilter, setKanbanStaffFilter] = useState(null);
   const [loading, setLoading]           = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -412,9 +413,12 @@ export default function JanaanJadual() {
     { key: 'In Progress', label: 'Dalam Proses', accent: '#2563EB', badgeBg: '#DBEAFE', badgeColor: '#1D4ED8' },
     { key: 'Completed',   label: 'Selesai',      accent: '#16A34A', badgeBg: '#DCFCE7', badgeColor: '#15803D' },
   ];
+  const filteredBoard = kanbanStaffFilter
+    ? board.filter(task => task.staff_name === kanbanStaffFilter)
+    : board;
   const kanbanGrouped = STATUS_COLUMNS.map(col => ({
     ...col,
-    tasks: board.filter(t => (t.status || 'Pending') === col.key),
+    tasks: filteredBoard.filter(t => (t.status || 'Pending') === col.key),
   }));
 
   const kpiCards = [
@@ -784,7 +788,7 @@ export default function JanaanJadual() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ display: 'flex', border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
-              <button onClick={() => setViewMode('staf')} style={{
+              <button onClick={() => { setViewMode('staf'); setKanbanStaffFilter(null); }} style={{
                 padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 border: 'none', display: 'flex', alignItems: 'center', gap: 5,
                 background: viewMode === 'staf' ? '#EFF6FF' : '#fff',
@@ -928,8 +932,9 @@ export default function JanaanJadual() {
                     }}
                     title={isRed ? 'Klik untuk lihat papan kanban' : undefined}
                     tabIndex={isRed ? 0 : undefined}
-                    onKeyDown={isRed ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setViewMode('kanban'); } } : undefined}
-                    onClick={isRed ? () => setViewMode('kanban') : undefined}
+                    role={isRed ? 'button' : undefined}
+                    onKeyDown={isRed ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setViewMode('kanban'); setKanbanStaffFilter(staffName); } } : undefined}
+                    onClick={isRed ? () => { setViewMode('kanban'); setKanbanStaffFilter(staffName); } : undefined}
                   >
                     {/* Kolum header */}
                     <div style={{ padding: '12px 14px', background: '#fff',
@@ -1020,6 +1025,18 @@ export default function JanaanJadual() {
         ) : (
           /* ── Papan Kanban — 3 lajur status ── */
           <div style={{ padding: '20px 24px' }}>
+            {kanbanStaffFilter && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '13px', color: '#64748B' }}>Ditapis: <strong>{kanbanStaffFilter}</strong></span>
+                <button
+                  className="btn btn--secondary"
+                  style={{ fontSize: '12px', padding: '4px 10px' }}
+                  onClick={() => setKanbanStaffFilter(null)}
+                >
+                  × Hapus Penapis
+                </button>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
               {kanbanGrouped.map(col => (
                 <div key={col.key} style={{ background: '#F8FAFC', borderRadius: 12,

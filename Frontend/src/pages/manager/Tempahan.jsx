@@ -169,7 +169,7 @@ export default function Tempahan() {
                     </td>
                     <td style={{ fontWeight: 500, color: '#1E293B' }}>{order.client_name}</td>
                     <td style={{ textTransform: 'capitalize' }}>
-                      {order.item_type ? order.item_type.replace('_', ' ') : '-'}
+                      {order.item_type ? order.item_type.replace(/_/g, ' ') : '-'}
                     </td>
                     <td>
                       <span className="td-mono">
@@ -215,7 +215,7 @@ export default function Tempahan() {
                 <div style={modalStyles.infoItem}>
                   <span style={modalStyles.infoLabel}>Jenis Item</span>
                   <span style={{ ...modalStyles.infoValue, textTransform: 'capitalize' }}>
-                    {selectedOrder.item_type ? selectedOrder.item_type.replace('_', ' ') : '-'}
+                    {selectedOrder.item_type ? selectedOrder.item_type.replace(/_/g, ' ') : '-'}
                   </span>
                 </div>
                 <div style={modalStyles.infoItem}>

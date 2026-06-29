@@ -58,7 +58,7 @@ export default function DetailStaf() {
       navigate('/staf');
     } catch (err) {
       console.error('Ralat memadam staf:', err);
-      setDeleteError('Gagal memadam staf. Sila cuba semula.');
+      setDeleteError(err.response?.data?.error || 'Gagal memadam staf. Sila cuba semula.');
       setIsDeleting(false);
       setConfirmDelete(false);
     }
