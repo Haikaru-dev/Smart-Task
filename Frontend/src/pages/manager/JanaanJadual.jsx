@@ -928,7 +928,7 @@ export default function JanaanJadual() {
                     }}
                     title={isRed ? 'Klik untuk lihat papan kanban' : undefined}
                     tabIndex={isRed ? 0 : undefined}
-                    onKeyDown={isRed ? (e) => { if (e.key === 'Enter') setViewMode('kanban'); } : undefined}
+                    onKeyDown={isRed ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setViewMode('kanban'); } } : undefined}
                     onClick={isRed ? () => setViewMode('kanban') : undefined}
                   >
                     {/* Kolum header */}

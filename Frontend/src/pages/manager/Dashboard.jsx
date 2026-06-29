@@ -182,6 +182,7 @@ export default function Dashboard() {
             key={card.label}
             className={`kpi-card ${card.modifier}`}
             onClick={card.navigateTo ? () => navigate(card.navigateTo) : undefined}
+            role={card.navigateTo ? 'button' : undefined}
             tabIndex={card.navigateTo ? 0 : undefined}
             onKeyDown={card.navigateTo ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(card.navigateTo); } } : undefined}
             style={{ position: 'relative', ...(card.navigateTo ? { cursor: 'pointer' } : {}) }}
