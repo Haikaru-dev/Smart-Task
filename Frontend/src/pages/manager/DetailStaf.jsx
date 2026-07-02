@@ -1,5 +1,5 @@
 // src/pages/DetailStaf.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
@@ -19,6 +19,9 @@ export default function DetailStaf() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting]       = useState(false);
   const [deleteError, setDeleteError]     = useState(null);
+
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef(null);
 
   // ── Ambil profil staf (silent = tiada spinner, untuk auto-refresh senyap) ──
   const fetchStaffDetail = useCallback(async (silent = false) => {
@@ -54,6 +57,23 @@ export default function DetailStaf() {
 
   // ── Auto-refresh: profil & tugasan staf kekal terkini tanpa reload ──
   useAutoRefresh(() => { fetchStaffDetail(true); fetchStaffTasks(true); });
+
+  // ── Muat naik gambar profil ──
+  async function handlePhotoUpload(file) {
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('photo', file);
+      const res = await axios.post(`${API_BASE_URL}/api/staff/${id}/profile-picture`, fd);
+      setStaff(prev => ({ ...prev, profile_picture_url: res.data.profile_picture_url }));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Gagal memuat naik gambar.');
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  }
 
   const handleDelete = async () => {
     try {
@@ -108,14 +128,50 @@ export default function DetailStaf() {
         
         {/* ── Lajur Kiri: Kad Profil ── */}
         <aside className="section-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px' }}>
-          <div style={{
-            width: '90px', height: '90px', borderRadius: '50%', backgroundColor: '#E2E8F0',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '28px', fontWeight: 'bold', color: '#475569', marginBottom: '16px'
-          }}>
-            {initial}
-          </div>
-          
+          {staff.profile_picture_url ? (
+            <img
+              src={`${API_BASE_URL}${staff.profile_picture_url}`}
+              alt={`Gambar profil ${staff.name}`}
+              onClick={() => !uploadingPhoto && photoInputRef.current?.click()}
+              style={{
+                width: '90px', height: '90px', borderRadius: '50%', objectFit: 'cover',
+                marginBottom: '8px', cursor: 'pointer', border: '2px solid #E2E8F0'
+              }}
+              title="Klik untuk tukar gambar"
+            />
+          ) : (
+            <div
+              onClick={() => !uploadingPhoto && photoInputRef.current?.click()}
+              title="Klik untuk tukar gambar"
+              style={{
+                width: '90px', height: '90px', borderRadius: '50%', backgroundColor: '#E2E8F0',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '28px', fontWeight: 'bold', color: '#475569', marginBottom: '8px',
+                cursor: 'pointer'
+              }}>
+              {initial}
+            </div>
+          )}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/jpeg,image/png"
+            style={{ display: 'none' }}
+            onChange={e => handlePhotoUpload(e.target.files[0])}
+          />
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            style={{
+              background: 'none', border: 'none', color: '#2563EB', fontSize: '12px',
+              fontWeight: 600, cursor: uploadingPhoto ? 'wait' : 'pointer', marginBottom: '16px', padding: 0
+            }}
+          >
+            {uploadingPhoto ? 'Memuat naik…' : 'Tukar Gambar'}
+          </button>
+
+
           <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0F172A', margin: '0 0 4px 0' }}>
             {staff.name}
           </h2>

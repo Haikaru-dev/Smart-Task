@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS staff (
     status       ENUM('Aktif','Cuti','Tidak Aktif') NOT NULL DEFAULT 'Aktif',
     email        VARCHAR(150) NULL,
     phone_number VARCHAR(20)  NULL,
+    profile_picture_url VARCHAR(255) NULL
+        COMMENT 'Laluan relatif gambar profil, contoh: /uploads/staff/staff-1-1234567890.jpg',
     user_id      INT          NULL COMMENT 'FK ke users.id — hubungan staf dengan akaun login',
     created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

@@ -359,18 +359,22 @@ export default function JanaanJadual() {
   const handleEditSave = async () => {
     try {
       setIsSaving(true);
-      await axios.put(`${API_BASE_URL}/api/tasks/${editingTask.id}`, {
+      const res = await axios.put(`${API_BASE_URL}/api/tasks/${editingTask.id}`, {
         assigned_staff_id: Number(editForm.assigned_staff_id) || null,
         task_type:   editForm.task_type,
         description: editForm.description,
         start_time:  editForm.start_time ? new Date(editForm.start_time).toISOString() : null,
         end_time:    editForm.end_time   ? new Date(editForm.end_time).toISOString()   : null,
       });
-      showToast('success', 'Tugasan berjaya dikemaskini!');
+      if (res.data?.warning) {
+        showToast('error', `Dikemaskini dengan amaran: ${res.data.warning}`);
+      } else {
+        showToast('success', 'Tugasan berjaya dikemaskini!');
+      }
       setEditingTask(null);
       await fetchBoard();
-    } catch {
-      showToast('error', 'Gagal mengemaskini tugasan. Cuba semula.');
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Gagal mengemaskini tugasan. Cuba semula.');
     } finally {
       setIsSaving(false);
     }

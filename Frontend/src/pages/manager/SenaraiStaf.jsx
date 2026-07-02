@@ -166,9 +166,17 @@ export default function SenaraiStaf() {
                   >
                     <td>
                       <div className="user-cell">
-                        <div className="user-initials-circle">
-                          {s.name.substring(0, 2).toUpperCase()}
-                        </div>
+                        {s.profile_picture_url ? (
+                          <img
+                            src={`${API_BASE_URL}${s.profile_picture_url}`}
+                            alt={`Gambar profil ${s.name}`}
+                            style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #BFDBFE' }}
+                          />
+                        ) : (
+                          <div className="user-initials-circle">
+                            {s.name.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontWeight: 500, color: '#1E293B' }}>{s.name}</span>
                           {s.username && (
@@ -207,9 +215,17 @@ export default function SenaraiStaf() {
               <div style={modalStyles.body}>
                 {/* Avatar + nama */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
-                  <div style={detailPanelStyles.avatar}>
-                    {selectedStaff.name.substring(0, 2).toUpperCase()}
-                  </div>
+                  {selectedStaff.profile_picture_url ? (
+                    <img
+                      src={`${API_BASE_URL}${selectedStaff.profile_picture_url}`}
+                      alt={`Gambar profil ${selectedStaff.name}`}
+                      style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #E2E8F0' }}
+                    />
+                  ) : (
+                    <div style={detailPanelStyles.avatar}>
+                      {selectedStaff.name.substring(0, 2).toUpperCase()}
+                    </div>
+                  )}
                   <h3 style={{ margin: '12px 0 4px', fontSize: '18px', fontWeight: '700', color: '#0F172A' }}>
                     {selectedStaff.name}
                   </h3>

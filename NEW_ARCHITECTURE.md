@@ -188,7 +188,7 @@ Pengurus, seperti pendaftaran tempahan dan penjanaan jadual."*
 | Mohon Cuti | — | ✅ | `requireRole('Staff','Manager')` |
 | Kemaskini profil sendiri | ✅ | ✅ | `requireRole('Staff','Manager')` |
 
-Status: **RBAC dikuatkuasakan konsisten pada peringkat backend untuk semua 32 route**
+Status: **RBAC dikuatkuasakan konsisten pada peringkat backend untuk semua 33 route**
 (disahkan — lihat §6). Ini ialah salah satu bahagian sistem yang **paling patuh**
 berbanding keperluan 3.4.1(b).
 
@@ -229,14 +229,23 @@ Kamus Data FYP" membandingkan dengan Jadual 3.17–3.22 rasmi.
 | status | ENUM('Aktif','Cuti','Tidak Aktif') DEFAULT 'Aktif' | Dipakai enjin AI untuk tapis staf tersedia |
 | email | VARCHAR(150) NULL | |
 | phone_number | VARCHAR(20) NULL | |
+| profile_picture_url | VARCHAR(255) NULL | Ditambah 2026-07-02 (migrasi `add_staff_profile_picture.sql` — §12 #5) |
 | user_id | INT NULL, FK → `users.id` **ON DELETE SET NULL** | |
 | created_at | TIMESTAMP | |
 
 > **Perbezaan dengan Kamus Data:**
-> - ❌ **`staff_id_code`** (cth. "ST-001", disebut dalam UC-02) — **tiada** dalam DB sebenar.
-> - ❌ **`profile_picture_url`** (F6.1, UC-02, UC-10) — **tiada** dalam DB sebenar, dan
->   **tiada langsung** dalam Frontend/Backend (0 padanan carian kod). Ciri gambar profil
->   **belum dibina** (§12, Keutamaan Sederhana).
+> - ❌ **`staff_id_code`** (cth. "ST-001", disebut dalam UC-02) — **tiada** dalam
+>   `schema.sql`. *Tetapi lihat nota DB langsung di bawah.*
+> - ✅ **`profile_picture_url`** (F6.1, UC-02, UC-10) — lajur, endpoint upload,
+>   dan UI frontend (upload + paparan) **kini lengkap** (2026-07-02, §12 #5 selesai).
+>
+> **⚠️ Nota penting (ditemui 2026-07-02):** pangkalan data XAMPP *langsung* pada mesin
+> pembangunan TIDAK sepadan dengan `schema.sql` v2.0 — jadual `staff` sebenar ada
+> `staff_id_code` (UNIQUE), `profile_picture_url` (sedia wujud sebelum migrasi ini),
+> ENUM `status` hanya `('Aktif','Cuti')` tanpa `'Tidak Aktif'`, dan saiz lajur berbeza
+> (`full_name` 100 vs 150). DB itu kemungkinan dicipta daripada skema lama
+> (`database.sql`/`setup_tables.sql`). Untuk konsistensi, pertimbang jana semula DB
+> daripada `schema.sql` + `seed.js`, atau selaraskan `schema.sql` dengan DB sebenar.
 > - ✅ `status` (`Aktif`/`Cuti`/`Tidak Aktif`) — tambahan berguna, **tiada** dalam kamus
 >   data asal tetapi diperlukan enjin AI; patut ditambah secara rasmi ke kamus data FYP
 >   dalam laporan (bukan isu kod).
@@ -315,7 +324,7 @@ tepat seperti kamus data). Ini keputusan skop untuk Kalll — bukan bug teknikal
 
 ---
 
-## 6. API Endpoints (Disahkan — 32 route, semua dalam `Backend/server.js`)
+## 6. API Endpoints (Disahkan — 33 route, semua dalam `Backend/server.js`)
 
 Semua endpoint berprefiks `/api/`. Port lalai `5000`. **Semua route bawah ini disahkan
 mempunyai `verifyToken`** (tiada lagi route yang "terlepas" middleware ini — isu ini
@@ -343,6 +352,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | POST | `/api/staff` | Manager | UC-02 |
 | GET | `/api/staff/:id` | Staff **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga |
 | DELETE | `/api/staff/:id` | Manager | UC-02 (alt: "Padam Staf") — ada guard halang padam akaun sendiri |
+| POST | `/api/staff/:id/profile-picture` | Staff (sendiri) atau Manager | F6.1, UC-02, UC-10 — multer berasingan (JPG/PNG, had 2MB, folder `/uploads/staff/`), fail dipadam jika 403/404 (§12 #5) |
 | PUT | `/api/staff/update-profile/:id` | Staff atau Manager | F6.1/F6.2, UC-10 (had: email + phone sahaja) |
 | PUT | `/api/staff/change-password/:userId` | Staff atau Manager | F6.2, UC-10 |
 
@@ -367,10 +377,10 @@ telah diperbetulkan sejak nota audit terdahulu).
 | Kaedah | Endpoint | Guard | F / UC |
 |---|---|---|---|
 | GET | `/api/tasks/board` | Manager | Papan agihan (kanban/staf view) |
-| POST | `/api/generate-schedule` | Manager | F3.1, UC-04 (alt: Round-Robin) — transaksi ✅, semak cuti *hari ini sahaja* |
+| POST | `/api/generate-schedule` | Manager | F3.1, UC-04 (alt: Round-Robin) — transaksi ✅, semakan cuti due_date-aware per-tugasan (§12 #6) |
 | POST | `/api/manager/auto-assign` | Manager | F3.1–F3.3, UC-04 (AI) — pulang cadangan sahaja, tak simpan |
 | POST | `/api/tasks/save-assignments` | Manager | Sahkan cadangan AI → simpan dalam transaksi |
-| PUT | `/api/tasks/:id` | Manager | F3.4 — **tiada semakan konflik cuti** (lihat §12 #6) |
+| PUT | `/api/tasks/:id` | Manager | F3.4 — semakan konflik cuti: 409 jika cuti penuh, `warning` jika separa (§12 #6) |
 | POST | `/api/tasks/confirm` | Manager | Sahkan draf → `approval_status = 'Confirmed'` |
 | DELETE | `/api/tasks/:id` | Manager | Padam draf sahaja (reset ke kolam belum diagih, bukan hard-delete) |
 | PATCH | `/api/tasks/:id/status` | Staff atau Manager | F4.3, F4.4, UC-08 — semak pemilikan (`staffId`), terima `status` + `file` (multer) + `notes` → `staff_notes` (§12 #2 selesai, 2026-07-02) |
@@ -402,7 +412,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | F2.3 | Kemas kini status percetakan (tender luar) | ✅ Patuh | `PATCH /api/orders/:id/status` + dropdown modal `Tempahan.jsx` (2026-07-02) |
 | F2.4 | Papar senarai penuh tempahan + status | ✅ Patuh | `GET /api/orders` |
 | F3.1–F3.2 | Jana tugasan (Reka Bentuk/Bungkus/Hantar), tetapkan staf & masa | ✅ Patuh | Round-Robin + Gemini AI, dua-dua ada |
-| F3.3 | Semak status cuti staf sebelum tetapkan tugasan | ⚠️ **Separa** | Lengkap pada laluan AI; *hari-ini-sahaja* pada Round-Robin; **tiada** pada edit manual (§12 #6) |
+| F3.3 | Semak status cuti staf sebelum tetapkan tugasan | ✅ Patuh | `getLeaveStatusForTask()` skop modul, dikongsi ketiga-tiga laluan (§12 #6 selesai, 2026-07-02) |
 | F3.4 | Sunting/padam tugasan berjadual | ✅ Patuh | `PUT`/`DELETE /api/tasks/:id` |
 | F4.1–F4.2 | Papar tugasan khusus staf log masuk + butiran | ✅ Patuh | `GET /api/staff/tasks/:staff_id`, semakan pemilikan |
 | F4.3 | Kemas kini status tugasan | ✅ Patuh | `PATCH /api/tasks/:id/status` |
@@ -411,11 +421,13 @@ telah diperbetulkan sejak nota audit terdahulu).
 | F5.2 | Papar sejarah & status cuti kepada Staf | ✅ Patuh | `GET /api/staff/leaves/:staff_id` |
 | F5.3 | Pengurus lihat senarai cuti tertunggak | ✅ Patuh | `GET /api/manager/leaves` |
 | F5.4 | Pengurus lulus/tolak cuti | ✅ Patuh | `PUT /api/manager/leaves/:id`, ada `rejection_reason` |
-| F6.1 | Papar profil (nama, jawatan, emel) | ⚠️ **Separa** | Teks/data ✅; **gambar profil ❌** — §12 #3 |
+| F6.1 | Papar profil (nama, jawatan, emel) | ✅ Patuh | Teks/data ✅; gambar profil ✅ (§12 #5 selesai, 2026-07-02) |
 | F6.2 | Tukar kata laluan | ✅ Patuh | `PUT /api/staff/change-password/:userId`, `PUT /api/admin/update/:userId` |
 | *(Jadual 3.1)* | *"Staf boleh menambah nota catatan pada tugasan"* | ✅ Patuh | Laluan penuh DB→backend→frontend (2026-07-02) — §12 #2 selesai |
 
-**Ringkasan:** 14/17 patuh penuh, 3 separa, 0 tiada langsung.
+**Ringkasan:** 17/17 patuh penuh, 0 separa, 0 tiada langsung (2026-07-02).
+*(Nota kiraan: dikira semula baris demi baris pada 2026-07-02 — ringkasan
+terdahulu "12/17 + 3 separa" tersilap kira; jadual sentiasa jadi rujukan.)*
 
 ---
 
@@ -424,7 +436,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | UC | Nama | Status | Nota |
 |---|---|---|---|
 | UC-01 | Log Sesi Pengguna | ✅ Patuh | |
-| UC-02 | Mengurus Akaun Staf | ⚠️ Separa | Tambah + padam ✅; gambar profil ❌; "Kemaskini" penuh tak jelas (§6) |
+| UC-02 | Mengurus Akaun Staf | ⚠️ Separa | Tambah + padam + gambar profil ✅; "Kemaskini" penuh (nama/jawatan) masih tak jelas dalam FYP (§6) |
 | UC-03 | Menambah Tempahan | ✅ Patuh | Bug case-sensitivity dibetulkan (§12 #4 selesai, 2026-07-02) |
 | UC-04 | Menjana & Kemaskini Tugasan | ✅ Patuh (+ lebih) | Draf-sahkan tidak dalam spek asal tapi selamat & berfungsi |
 | UC-05 | Meluluskan Cuti | ✅ Patuh | |
@@ -432,7 +444,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | UC-07 | Melihat Tugasan Harian | ✅ Patuh | |
 | UC-08 | Mengemas Kini Status Tugasan | ✅ Patuh | Status + bukti kerja + nota/catatan (§12 #2 selesai, 2026-07-02) |
 | UC-09 | Memohon Cuti | ✅ Patuh | |
-| UC-10 | Mengurus Profil Diri | ⚠️ Separa | Emel/telefon/kata laluan ✅; gambar profil ❌ |
+| UC-10 | Mengurus Profil Diri | ✅ Patuh | Emel/telefon/kata laluan/gambar profil ✅ (§12 #5 selesai, 2026-07-02) |
 | UC-11 | Mengemas Kini Status Tempahan | ✅ Patuh | `PATCH /api/orders/:id/status` + dropdown modal (2026-07-02, §12 #1 selesai) |
 
 ---
@@ -442,7 +454,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 **(a) Kebolehgunaan** — Antara muka responsif, semua teks Bahasa Melayu, portal
 mudah alih-mesra untuk Staf. Tiada isu ketara dikesan semasa audit kod.
 
-**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 32/32 route
+**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 33/33 route
 bergerbang). Kata laluan di-hash bcrypt (disahkan `seed.js` + route tukar kata
 laluan). **Tetapi**: JWT secret ada fallback hardcode terdedah dalam repo awam
 (§3.1) — ini secara langsung bertentangan dengan semangat 3.4.1(b) walaupun bukan
@@ -528,10 +540,12 @@ Printing/Packing 1 jam/100 unit, min 1 jam), waktu kerja 09:00–18:00.
 **cadangan sahaja** (tiada auto-simpan) → papar untuk semakan Admin → Admin terima/
 ubah → `POST /api/tasks/save-assignments` simpan dalam **satu transaksi MySQL**.
 
-**Peringkat 6 (Alternatif) — Round-Robin:** `POST /api/generate-schedule`, agihan
-mudah `index % staffList.length`, dibalut transaksi, **tetapi** semakan cuti di sini
-hanya "bercuti hari ini" — tidak selaras sepenuhnya dengan pendekatan tetingkap-tarikh
-Peringkat 2 di atas (§12 #6).
+**Peringkat 6 (Alternatif) — Round-Robin:** `POST /api/generate-schedule`, giliran
+round-robin dengan kursor, dibalut transaksi. Sejak 2026-07-02, semakan cuti guna
+`getLeaveStatusForTask()` yang sama dengan Peringkat 2 (kini fungsi skop modul —
+§12 #6 selesai): staf yang bercuti penuh sepanjang tempoh tugasan dilangkau
+per-tugasan, dan tugasan tanpa sebarang staf tersedia dilaporkan dalam
+`skippedTaskIds` tanpa menggagalkan keseluruhan janaan.
 
 **⚠️ Peringatan pembangunan (kekal daripada dokumentasi terdahulu, masih sah):**
 Logik pemadanan kemahiran, pengiraan beban kerja, dan pemprosesan konflik cuti Gemini
@@ -588,21 +602,40 @@ berjaya dan GET senarai masih berfungsi (instance ujian + MySQL langsung).
 
 ### 🟡 Keutamaan Sederhana
 
-**#5 — Gambar profil staf langsung tiada (F6.1, UC-02, UC-10)**
-Carian menyeluruh (`profile_picture`, `gambar_profil`, `fotoProfil`, `avatarUrl`)
-memulangkan **sifar** padanan dalam Frontend, Backend, dan `schema.sql`. Ciri
-belum dimulakan langsung — perlu lajur DB, endpoint upload (boleh guna corak
-`multer` sedia ada untuk lampiran tugasan), dan UI pada `SenaraiStaf.jsx`/
-`DetailStaf.jsx` (Admin) serta `ProfilStaf.jsx` (Staf).
+**#5 — ✅ SELESAI (2026-07-02) — Gambar profil staf (F6.1, UC-02, UC-10)**
+**Backend lengkap:** lajur `profile_picture_url` (migrasi
+`add_staff_profile_picture.sql` + `schema.sql`; *nota: DB XAMPP tempatan sudah
+ada lajur ini — jangan jalankan migrasi di situ, lihat §5.2*), endpoint
+`POST /api/staff/:id/profile-picture` (multer berasingan: JPG/PNG sahaja,
+had 2MB, simpan ke `/uploads/staff/`, staf hanya boleh upload untuk diri
+sendiri — 403 dengan fail dibersihkan, Manager untuk sesiapa sahaja), dan
+`GET /api/staff` + `GET /api/staff/:id` kedua-duanya pulangkan lajur ini.
+Diuji sebenar: 6 kes (jaya/jenis salah/saiz besar/403/404/GET) semuanya lulus.
+**UI frontend (siap 2026-07-02):** upload melalui klik avatar / butang
+"Tukar Gambar" (input fail tersembunyi, JPG/PNG) pada `DetailStaf.jsx` (Admin,
+mana-mana staf) dan `ProfilStaf.jsx` (Staf sendiri, maklum balas toast);
+paparan avatar (gambar atau placeholder inisial — tiada `<img>` pecah kerana
+render bersyarat) pada baris senarai dan panel detail `SenaraiStaf.jsx`.
+Nota: UI disahkan melalui build + endpoint diuji sebenar; klik-lalui penuh
+dalam pelayar belum dibuat — sahkan visual semasa demo seterusnya.
 
-**#6 — Semakan konflik cuti (F3.3) tak konsisten merentas 3 laluan agihan**
-- Laluan AI (`/api/manager/auto-assign`): semakan penuh tetingkap-tarikh ✅
-- Round-Robin (`/api/generate-schedule`): semakan "bercuti **hari ini** sahaja" ⚠️
-- Edit manual (`PUT /api/tasks/:id`): **tiada semakan langsung** ❌
+**#6 — ✅ SELESAI (2026-07-02) — Semakan konflik cuti (F3.3) kini konsisten merentas 3 laluan agihan**
+`getLeaveStatusForTask()` dinaikkan ke **skop modul** `server.js` (verbatim,
+tiada perubahan logik) dan kini dipanggil oleh ketiga-tiga laluan:
+- Laluan AI (`/api/manager/auto-assign`): seperti sedia ada ✅
+- Round-Robin (`/api/generate-schedule`): per-tugasan, due_date-aware
+  (query tugasan kini JOIN `orders` untuk `due_date`); tugasan tanpa staf
+  tersedia **dilangkau** dan dilaporkan dalam `skippedTaskIds` ✅
+- Edit manual (`PUT /api/tasks/:id`): staf bercuti **penuh** sepanjang tempoh
+  tugasan → `409` (UPDATE dihalang); cuti **separa** → berjaya dengan medan
+  `warning` dalam respons, dipaparkan sebagai toast oleh `JanaanJadual.jsx` ✅
 
-  F3.3 tidak hadkan keperluan ini kepada laluan AI sahaja — ia keperluan am
-  bila "Pengurus menetapkan tugasan". Admin boleh manual-assign staf yang
-  bercuti tanpa amaran melalui `PUT /api/tasks/:id` pada masa ini.
+  Diuji sebenar pada 2026-07-02 (instance ujian + MySQL): staf cuti penuh
+  dilangkau/disekat 409, staf cuti separa diterima dengan amaran.
+  *Nota kuirks sedia ada (dikekalkan, bukan regresi):* penukaran tarikh
+  `toISOString()` pada objek `Date` MySQL boleh anjak -1 hari (UTC vs tempatan),
+  menyebabkan semakan sedikit lebih konservatif — tingkah laku ini SAMA dengan
+  laluan AI asal dan tidak diubah selaras sempadan "jangan tulis semula" (§11).
 
 ### 🟢 Keutamaan Rendah
 

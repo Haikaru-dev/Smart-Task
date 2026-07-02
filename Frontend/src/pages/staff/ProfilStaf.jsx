@@ -1,5 +1,5 @@
 // src/pages/staff/ProfilStaf.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 
@@ -104,6 +104,9 @@ export default function ProfilStaf() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
 
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef(null);
+
   // ── Ambil data profil & sejarah cuti ──
   const fetchData = useCallback(async () => {
     if (!staffId) { setLoading(false); return; }
@@ -132,6 +135,25 @@ export default function ProfilStaf() {
   }, [staffId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Muat naik gambar profil ──
+  async function handlePhotoUpload(file) {
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('photo', file);
+      const res = await axios.post(`${API_BASE_URL}/api/staff/${staffId}/profile-picture`, fd);
+      setProfile(prev => ({ ...prev, profile_picture_url: res.data.profile_picture_url }));
+      setToast({ type: 'success', text: '✓ Gambar profil berjaya dikemaskini!' });
+    } catch (err) {
+      setToast({ type: 'error', text: err.response?.data?.error || 'Gagal memuat naik gambar.' });
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      setTimeout(() => setToast(null), 5000);
+    }
+  }
 
   // ── Hantar kemaskini ──
   const handleSave = async (e) => {
@@ -246,15 +268,50 @@ export default function ProfilStaf() {
           
           {/* Kad Profil Utama */}
           <div className="section-card" style={{ marginBottom: 0, padding: '32px 24px', textAlign: 'center' }}>
-            <div style={{
-              width: 100, height: 100, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #1E40AF, #2563EB)',
-              margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 36, fontWeight: 700, color: '#fff',
-              boxShadow: '0 8px 24px rgba(37,99,235,0.25)', border: '4px solid #EFF6FF'
-            }}>
-              {getInitials(displayName)}
-            </div>
+            {profile?.profile_picture_url ? (
+              <img
+                src={`${API_BASE_URL}${profile.profile_picture_url}`}
+                alt="Gambar profil anda"
+                onClick={() => !uploadingPhoto && photoInputRef.current?.click()}
+                title="Klik untuk tukar gambar"
+                style={{
+                  width: 100, height: 100, borderRadius: '50%', objectFit: 'cover',
+                  margin: '0 auto 8px', display: 'block', cursor: 'pointer',
+                  boxShadow: '0 8px 24px rgba(37,99,235,0.25)', border: '4px solid #EFF6FF'
+                }}
+              />
+            ) : (
+              <div
+                onClick={() => !uploadingPhoto && photoInputRef.current?.click()}
+                title="Klik untuk tukar gambar"
+                style={{
+                  width: 100, height: 100, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #1E40AF, #2563EB)',
+                  margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 36, fontWeight: 700, color: '#fff', cursor: 'pointer',
+                  boxShadow: '0 8px 24px rgba(37,99,235,0.25)', border: '4px solid #EFF6FF'
+                }}>
+                {getInitials(displayName)}
+              </div>
+            )}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png"
+              style={{ display: 'none' }}
+              onChange={e => handlePhotoUpload(e.target.files[0])}
+            />
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              style={{
+                background: 'none', border: 'none', color: '#2563EB', fontSize: 12,
+                fontWeight: 600, cursor: uploadingPhoto ? 'wait' : 'pointer', marginBottom: 12, padding: 0
+              }}
+            >
+              {uploadingPhoto ? 'Memuat naik…' : 'Tukar Gambar'}
+            </button>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0F172A', margin: '0 0 6px' }}>
               {displayName}
             </h2>

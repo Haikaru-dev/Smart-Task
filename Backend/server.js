@@ -22,6 +22,40 @@ if (!process.env.JWT_SECRET) {
     );
 }
 
+// Semakan konflik cuti dikongsi oleh KETIGA-TIGA laluan agihan tugasan:
+// auto-assign (AI), generate-schedule (Round-Robin), dan PUT /api/tasks/:id (manual)
+function getLeaveStatusForTask(staffId, dueDateStr, leavesList, todayDateStr) {
+    const today = new Date(todayDateStr);
+    const dueDate = new Date(dueDateStr);
+    const staffLeaves = leavesList.filter(l => l.staff_id === staffId);
+
+    let isFullyOnLeave = false;
+    let compressedWindowMessage = null;
+
+    for (const leave of staffLeaves) {
+        const leaveStart = new Date(leave.start_date);
+        const leaveEnd = new Date(leave.end_date);
+
+        const overlapStart = new Date(Math.max(today, leaveStart));
+        const overlapEnd = new Date(Math.min(dueDate, leaveEnd));
+
+        if (overlapStart <= overlapEnd) {
+            const totalPeriodDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)) + 1;
+            const overlapDays = Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
+
+            if (overlapDays >= totalPeriodDays) {
+                isFullyOnLeave = true;
+                break;
+            } else {
+                const startStr = leave.start_date instanceof Date ? leave.start_date.toISOString().slice(0, 10) : new String(leave.start_date).slice(0, 10);
+                const endStr = leave.end_date instanceof Date ? leave.end_date.toISOString().slice(0, 10) : new String(leave.end_date).slice(0, 10);
+                compressedWindowMessage = `Staf bercuti dari ${startStr} hingga ${endStr} (bertindih dengan tempoh tugasan). Tempoh kerja efektif menjadi lebih singkat. Sila awalkan tugasan atau agihkan ke staf lain jika perlu.`;
+            }
+        }
+    }
+    return { isFullyOnLeave, compressedWindowMessage };
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -65,6 +99,41 @@ function uploadSingle(field) {
             if (!err) return next();
             const msg = err.code === 'LIMIT_FILE_SIZE'
                 ? 'Fail terlalu besar. Had maksimum ialah 5MB.'
+                : (err.message || 'Ralat muat naik fail.');
+            res.status(400).json({ error: msg });
+        });
+    };
+}
+
+// ── Konfigurasi multer untuk gambar profil staf (berasingan daripada lampiran tugasan) ──
+const staffPhotoDir = path.join(__dirname, 'uploads', 'staff');
+if (!fs.existsSync(staffPhotoDir)) fs.mkdirSync(staffPhotoDir, { recursive: true });
+
+const staffPhotoStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, staffPhotoDir),
+    filename: (req, file, cb) => {
+        const staffId = req.params.id || 'unknown';
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, `staff-${staffId}-${Date.now()}${ext}`);
+    }
+});
+
+const staffPhotoUpload = multer({
+    storage: staffPhotoStorage,
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png'];
+        if (allowed.includes(file.mimetype)) cb(null, true);
+        else cb(new Error('Jenis fail tidak dibenarkan. Hanya JPG dan PNG diterima.'));
+    },
+    limits: { fileSize: 2 * 1024 * 1024 }
+});
+
+function uploadStaffPhoto(field) {
+    return (req, res, next) => {
+        staffPhotoUpload.single(field)(req, res, (err) => {
+            if (!err) return next();
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? 'Fail terlalu besar. Had maksimum ialah 2MB.'
                 : (err.message || 'Ralat muat naik fail.');
             res.status(400).json({ error: msg });
         });
@@ -409,7 +478,7 @@ app.get('/api/dashboard/leave-stats', verifyToken, requireRole('Manager'), async
 // Endpoint untuk mendapatkan senarai staf
 app.get('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
-        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.full_name ASC`;
+        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, s.profile_picture_url, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.full_name ASC`;
         const [results] = await db.query(sql);
         res.status(200).json(results);
     } catch (err) {
@@ -488,7 +557,7 @@ app.post('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => 
 app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staffId = req.params.id;
-        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, s.email, s.phone_number, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`;
+        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, s.email, s.phone_number, s.profile_picture_url, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`;
         const [results] = await db.query(sql, [staffId]);
         if (results.length === 0) {
             return res.status(404).json({ message: "Staf tidak dijumpai" });
@@ -497,6 +566,31 @@ app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (r
     } catch (err) {
         console.error("Ralat MySQL:", err);
         res.status(500).json({ error: "Gagal mengambil data staf." });
+    }
+});
+
+// Endpoint untuk muat naik gambar profil staf (F6.1, UC-02, UC-10)
+app.post('/api/staff/:id/profile-picture', verifyToken, requireRole('Staff', 'Manager'), uploadStaffPhoto('photo'), async (req, res) => {
+    try {
+        const staffId = req.params.id;
+        // multer simpan fail SEBELUM handler — padam semula jika permintaan ditolak
+        if (req.user.role === 'Staff' && String(req.user.staffId) !== String(staffId)) {
+            if (req.file) fs.unlink(req.file.path, () => {});
+            return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh kemaskini gambar profil sendiri.' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: 'Tiada fail gambar diterima.' });
+        }
+        const photoUrl = `/uploads/staff/${req.file.filename}`;
+        const [result] = await db.query(`UPDATE staff SET profile_picture_url = ? WHERE id = ?`, [photoUrl, staffId]);
+        if (result.affectedRows === 0) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(404).json({ error: 'Staf tidak dijumpai.' });
+        }
+        res.status(200).json({ message: 'Gambar profil berjaya dikemaskini.', profile_picture_url: photoUrl });
+    } catch (err) {
+        console.error('Ralat POST /api/staff/:id/profile-picture:', err);
+        res.status(500).json({ error: 'Gagal memuat naik gambar profil.' });
     }
 });
 
@@ -627,36 +721,61 @@ app.put('/api/manager/leaves/:id', verifyToken, requireRole('Manager'), async (r
 // 1. Endpoint untuk menjana agihan tugasan secara automatik (Round-Robin)
 app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
-        // A. Cari tugas yang belum diagihkan
+        // A. Cari tugas yang belum diagihkan (JOIN orders untuk due_date —
+        //    diperlukan oleh semakan cuti per-tugasan di bawah)
         const [tasks] = await db.query(
-            `SELECT * FROM tasks WHERE assigned_staff_id IS NULL AND status = 'Pending'`
+            `SELECT tasks.*, orders.due_date
+             FROM tasks
+             JOIN orders ON tasks.order_id = orders.id
+             WHERE tasks.assigned_staff_id IS NULL AND tasks.status = 'Pending'`
         );
 
         if (tasks.length === 0) {
             return res.status(200).json({ message: "Tiada tugasan baharu untuk diagihkan." });
         }
 
-        // B. Cari staf yang aktif dan tidak bercuti hari ini
-        const today = new Date().toISOString().slice(0, 10);
-        const [staffList] = await db.query(`
-            SELECT staff.* FROM staff
-            WHERE staff.status = 'Aktif'
-            AND staff.id NOT IN (
-                SELECT staff_id FROM leaves
-                WHERE status = 'Approved'
-                AND start_date <= ? AND end_date >= ?
-            )
-        `, [today, today]);
-
+        // B. Cari SEMUA staf aktif — semakan cuti dibuat PER-TUGASAN (due_date-aware)
+        const [staffList] = await db.query(`SELECT * FROM staff WHERE status = 'Aktif'`);
         if (staffList.length === 0) {
-            return res.status(400).json({ error: "Tiada staf yang tersedia hari ini!" });
+            return res.status(400).json({ error: "Tiada staf aktif dalam sistem!" });
         }
 
-        // C. ALGORITMA AGIHAN PINTAR: Round-Robin / Load Balancing
-        const assignments = tasks.map((task, index) => ({
-            taskId: task.id,
-            staffId: staffList[index % staffList.length].id
-        }));
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const [leaveRows] = await db.query(
+            `SELECT * FROM leaves WHERE status = 'Approved' AND end_date >= ?`,
+            [todayStr]
+        );
+
+        // C. Round-Robin — untuk setiap tugasan, cari staf seterusnya dalam giliran
+        //    yang TIDAK bercuti sepanjang tempoh tugasan tersebut (hingga due_date)
+        let cursor = 0;
+        const assignments = [];
+        const skippedTaskIds = [];
+        for (const task of tasks) {
+            const dueDateStr = task.due_date instanceof Date
+                ? task.due_date.toISOString().slice(0, 10)
+                : String(task.due_date).slice(0, 10);
+
+            let picked = null;
+            for (let i = 0; i < staffList.length; i++) {
+                const candidate = staffList[(cursor + i) % staffList.length];
+                const { isFullyOnLeave } = getLeaveStatusForTask(candidate.id, dueDateStr, leaveRows, todayStr);
+                if (!isFullyOnLeave) {
+                    picked = candidate;
+                    cursor = (cursor + i + 1) % staffList.length;
+                    break;
+                }
+            }
+            if (picked) {
+                assignments.push({ taskId: task.id, staffId: picked.id });
+            } else {
+                skippedTaskIds.push(task.id);
+            }
+        }
+
+        if (assignments.length === 0) {
+            return res.status(400).json({ error: "Semua staf bercuti sepanjang tempoh tugasan yang belum diagih." });
+        }
 
         // D. Jalankan semua kemaskini dalam satu transaksi
         const connection = await db.getConnection();
@@ -672,8 +791,10 @@ app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (r
 
             await connection.commit();
             res.status(200).json({
-                message: `Berjaya! Sistem telah mengagihkan ${tasks.length} tugasan baharu.`,
-                assignedCount: tasks.length
+                message: `Berjaya! ${assignments.length} tugasan diagihkan.` +
+                         (skippedTaskIds.length ? ` ${skippedTaskIds.length} tugasan dilangkau (semua staf bercuti sepanjang tempoh tugasan).` : ''),
+                assignedCount: assignments.length,
+                skippedTaskIds
             });
 
         } catch (txErr) {
@@ -783,38 +904,7 @@ app.post('/api/manager/auto-assign', verifyToken, requireRole('Manager'), async 
         `, [todayStr]);
 
         // F. Bina data terstruktur dengan filter SQL/JS dan pengesanan Compressed Window
-        function getLeaveStatusForTask(staffId, dueDateStr, leavesList, todayDateStr) {
-            const today = new Date(todayDateStr);
-            const dueDate = new Date(dueDateStr);
-            const staffLeaves = leavesList.filter(l => l.staff_id === staffId);
-            
-            let isFullyOnLeave = false;
-            let compressedWindowMessage = null;
-            
-            for (const leave of staffLeaves) {
-                const leaveStart = new Date(leave.start_date);
-                const leaveEnd = new Date(leave.end_date);
-                
-                const overlapStart = new Date(Math.max(today, leaveStart));
-                const overlapEnd = new Date(Math.min(dueDate, leaveEnd));
-                
-                if (overlapStart <= overlapEnd) {
-                    const totalPeriodDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)) + 1;
-                    const overlapDays = Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
-                    
-                    if (overlapDays >= totalPeriodDays) {
-                        isFullyOnLeave = true;
-                        break;
-                    } else {
-                        const startStr = leave.start_date instanceof Date ? leave.start_date.toISOString().slice(0, 10) : new String(leave.start_date).slice(0, 10);
-                        const endStr = leave.end_date instanceof Date ? leave.end_date.toISOString().slice(0, 10) : new String(leave.end_date).slice(0, 10);
-                        compressedWindowMessage = `Staf bercuti dari ${startStr} hingga ${endStr} (bertindih dengan tempoh tugasan). Tempoh kerja efektif menjadi lebih singkat. Sila awalkan tugasan atau agihkan ke staf lain jika perlu.`;
-                    }
-                }
-            }
-            return { isFullyOnLeave, compressedWindowMessage };
-        }
-
+        //    (getLeaveStatusForTask kini di skop modul — dikongsi semua laluan agihan)
         const tasksForAI = tasks.map(task => {
             const dueDateStr = task.due_date instanceof Date ? task.due_date.toISOString().slice(0, 10) : new String(task.due_date).slice(0, 10);
             const availableStaff = [];
@@ -1351,6 +1441,34 @@ app.put('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, res) 
         const fmtStart = start_time ? new Date(start_time).toISOString().slice(0, 19).replace('T', ' ') : null;
         const fmtEnd   = end_time   ? new Date(end_time).toISOString().slice(0, 19).replace('T', ' ')   : null;
 
+        // Semakan konflik cuti (F3.3) — logik sama dengan auto-assign & generate-schedule
+        let leaveWarning = null;
+        if (assigned_staff_id) {
+            const [[orderInfo]] = await db.query(
+                `SELECT orders.due_date FROM tasks JOIN orders ON tasks.order_id = orders.id WHERE tasks.id = ?`,
+                [taskId]
+            );
+            if (orderInfo) {
+                const dueDateStr = orderInfo.due_date instanceof Date
+                    ? orderInfo.due_date.toISOString().slice(0, 10)
+                    : String(orderInfo.due_date).slice(0, 10);
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const [leaveRows] = await db.query(
+                    `SELECT * FROM leaves WHERE staff_id = ? AND status = 'Approved' AND end_date >= ?`,
+                    [assigned_staff_id, todayStr]
+                );
+                const { isFullyOnLeave, compressedWindowMessage } =
+                    getLeaveStatusForTask(Number(assigned_staff_id), dueDateStr, leaveRows, todayStr);
+
+                if (isFullyOnLeave) {
+                    return res.status(409).json({
+                        error: 'Staf ini bercuti sepanjang tempoh tugasan (hingga tarikh siap tempahan). Pilih staf lain atau ubah tarikh.'
+                    });
+                }
+                leaveWarning = compressedWindowMessage;
+            }
+        }
+
         const [result] = await db.query(
             `UPDATE tasks
              SET assigned_staff_id = ?, task_type = ?, description = ?, start_time = ?, end_time = ?
@@ -1360,7 +1478,10 @@ app.put('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, res) 
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: "Tugasan tidak dijumpai." });
         }
-        res.status(200).json({ message: "Tugasan berjaya dikemaskini!" });
+        res.status(200).json({
+            message: "Tugasan berjaya dikemaskini!",
+            ...(leaveWarning ? { warning: leaveWarning } : {})
+        });
     } catch (err) {
         console.error("Ralat PUT /api/tasks/:id:", err);
         res.status(500).json({ error: "Gagal mengemaskini tugasan." });
