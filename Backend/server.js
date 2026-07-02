@@ -166,8 +166,8 @@ app.post('/api/orders', verifyToken, requireRole('Manager'), async (req, res) =>
     const order_number = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     // 3. Masukkan 'delivery_location' ke dalam SQL (pastikan kolum ini wujud di MySQL anda)
-    const sql = `INSERT INTO Orders 
-                 (order_number, client_name, item_type, quantity, price, due_date, delivery_type, delivery_location, specifications, status) 
+    const sql = `INSERT INTO orders
+                 (order_number, client_name, item_type, quantity, price, due_date, delivery_type, delivery_location, specifications, status)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`;
 
     // 4. Susun 'values' mengikut urutan tanda soal (?) di atas
@@ -209,6 +209,30 @@ app.get('/api/orders', verifyToken, requireRole('Manager'), async (req, res) => 
     } catch (error) {
         console.error("Ralat MySQL:", error);
         res.status(500).json({ error: "Gagal mengambil data tempahan." });
+    }
+});
+
+// Endpoint untuk kemaskini status tempahan (UC-11 / F2.3)
+app.patch('/api/orders/:id/status', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const { status } = req.body;
+
+        const ALLOWED = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
+        if (!status || !ALLOWED.includes(status)) {
+            return res.status(400).json({
+                error: `Status tidak sah. Nilai yang dibenarkan: ${ALLOWED.join(', ')}.`
+            });
+        }
+
+        const [result] = await db.query(`UPDATE orders SET status = ? WHERE id = ?`, [status, orderId]);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Tempahan tidak dijumpai.' });
+        }
+        res.status(200).json({ message: 'Status tempahan berjaya dikemaskini.', orderId, status });
+    } catch (err) {
+        console.error('Ralat PATCH /api/orders/:id/status:', err);
+        res.status(500).json({ error: 'Gagal mengemaskini status tempahan.' });
     }
 });
 
@@ -1265,7 +1289,7 @@ app.put('/api/admin/update/:userId', verifyToken, requireRole('Manager'), async 
 app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'), uploadSingle('file'), async (req, res) => {
     try {
         const taskId = parseInt(req.params.id, 10);
-        const { status } = req.body;
+        const { status, notes } = req.body;
 
         const ALLOWED = ['Pending', 'In Progress', 'Completed'];
         if (!status || !ALLOWED.includes(status)) {
@@ -1290,13 +1314,13 @@ app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'),
         if (req.file) {
             attachmentPath = `/uploads/tasks/${req.file.filename}`;
             await db.query(
-                `UPDATE tasks SET status = ?, attachment_path = ? WHERE id = ?`,
-                [status, attachmentPath, taskId]
+                `UPDATE tasks SET status = ?, attachment_path = ?, staff_notes = ? WHERE id = ?`,
+                [status, attachmentPath, notes || null, taskId]
             );
         } else {
             await db.query(
-                `UPDATE tasks SET status = ? WHERE id = ?`,
-                [status, taskId]
+                `UPDATE tasks SET status = ?, staff_notes = ? WHERE id = ?`,
+                [status, notes || null, taskId]
             );
         }
 

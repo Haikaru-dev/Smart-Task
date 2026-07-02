@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS tasks (
         COMMENT 'Draft = belum disahkan admin; Confirmed = staf boleh lihat',
     attachment_path   VARCHAR(255) NULL
         COMMENT 'Laluan relatif fail yang dimuat naik oleh staf, contoh: /uploads/tasks/task-1-1234567890.pdf',
+    staff_notes       TEXT        NULL
+        COMMENT 'Nota / catatan daripada staf semasa kemaskini status tugasan',
     created_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_tasks_order

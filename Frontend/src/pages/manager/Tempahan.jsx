@@ -31,6 +31,7 @@ export default function Tempahan() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // ── Ambil data tempahan (silent = tiada spinner, untuk auto-refresh senyap) ──
   async function fetchOrders(silent = false) {
@@ -64,6 +65,22 @@ export default function Tempahan() {
   function handleCloseModal() {
     setIsModalOpen(false);
     setSelectedOrder(null);
+  }
+
+  // ── Kemaskini status tempahan terus dari modal (UC-11) ──
+  async function handleUpdateStatus(newStatus) {
+    if (!selectedOrder || newStatus === selectedOrder.status) return;
+    setUpdatingStatus(true);
+    try {
+      await axios.patch(`${API_BASE_URL}/api/orders/${selectedOrder.id}/status`, { status: newStatus });
+      setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, status: newStatus } : o));
+    } catch (err) {
+      console.error('Ralat kemas kini status:', err);
+      alert(err.response?.data?.error || 'Gagal mengemaskini status tempahan.');
+    } finally {
+      setUpdatingStatus(false);
+    }
   }
 
   // ── JSON-LD Data ──
@@ -240,10 +257,22 @@ export default function Tempahan() {
                 </div>
                 <div style={modalStyles.infoItem}>
                   <span style={modalStyles.infoLabel}>Status Semasa</span>
-                  <div style={{ marginTop: '4px' }}>
+                  <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`badge ${getBadgeClass(selectedOrder.status)}`}>
                       {selectedOrder.status || 'Pending'}
                     </span>
+                    <select
+                      value={selectedOrder.status || 'Pending'}
+                      onChange={(e) => handleUpdateStatus(e.target.value)}
+                      disabled={updatingStatus}
+                      style={{ fontSize: '13px', padding: '2px 6px' }}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                    {updatingStatus && <span style={{ fontSize: '12px', color: '#64748B' }}>Menyimpan…</span>}
                   </div>
                 </div>
                 <div style={modalStyles.infoItem}>

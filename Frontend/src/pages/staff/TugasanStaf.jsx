@@ -187,6 +187,7 @@ export default function TugasanStaf() {
     try {
       const formData = new FormData();
       formData.append('status', form.status);
+      formData.append('notes', form.notes || '');
       if (form.file) formData.append('file', form.file);
 
       const res = await axios.patch(
@@ -198,7 +199,7 @@ export default function TugasanStaf() {
       setSaveMsg({ type: 'success', text: 'Status tugasan berjaya dikemaskini!' });
       setTasks(prev => prev.map(t =>
         t.id === activeTask.id
-          ? { ...t, status: form.status, attachment_path: res.data.attachment_path ?? t.attachment_path }
+          ? { ...t, status: form.status, staff_notes: form.notes, attachment_path: res.data.attachment_path ?? t.attachment_path }
           : t
       ));
       setForm(f => ({ ...f, file: null }));

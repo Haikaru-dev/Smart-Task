@@ -185,7 +185,7 @@ Pengurus, seperti pendaftaran tempahan dan penjanaan jadual."*
 | Mohon Cuti | — | ✅ | `requireRole('Staff','Manager')` |
 | Kemaskini profil sendiri | ✅ | ✅ | `requireRole('Staff','Manager')` |
 
-Status: **RBAC dikuatkuasakan konsisten pada peringkat backend untuk semua 31 route**
+Status: **RBAC dikuatkuasakan konsisten pada peringkat backend untuk semua 32 route**
 (disahkan — lihat §6). Ini ialah salah satu bahagian sistem yang **paling patuh**
 berbanding keperluan 3.4.1(b).
 
@@ -272,12 +272,13 @@ Kamus Data FYP" membandingkan dengan Jadual 3.17–3.22 rasmi.
 | status | ENUM('Pending','In Progress','Completed') | |
 | **approval_status** | **ENUM('Draft','Confirmed') DEFAULT 'Confirmed'** | **Tiada dalam kamus data ATAU dokumentasi lama** — teras aliran draf-dan-sahkan (§11) |
 | attachment_path | VARCHAR(255) NULL | Bukti kerja staf, cth. `/uploads/tasks/task-1-…pdf` |
+| staff_notes | TEXT NULL | Nota/catatan staf semasa kemaskini status (ditambah 2026-07-02, migrasi `add_task_staff_notes.sql` — §12 #2 selesai) |
 | created_at | TIMESTAMP | |
 
 > **Perbezaan dengan Kamus Data:**
-> - ❌ **`staff_notes`** (kamus data + Jadual 3.1: *"Staf boleh menambah nota catatan
->   pada tugasan"*) — **lajur tiada dalam DB**. Ini bukan sekadar ketiadaan lajur —
->   ia satu jurang 3-lapisan aktif; lihat §12, Keutamaan Tinggi #2.
+> - ✅ **`staff_notes`** (kamus data + Jadual 3.1: *"Staf boleh menambah nota catatan
+>   pada tugasan"*) — **kini wujud** (2026-07-02): lajur DB + backend + frontend
+>   ketiga-tiga lapisan lengkap; lihat §12 #2 (selesai).
 > - ✅ `approval_status` — mekanisme keselamatan tambahan (draf AI perlu disahkan
 >   Admin dahulu sebelum staf nampak) yang **berfungsi dan diuji**, tetapi tidak
 >   didokumenkan di mana-mana (bukan dalam kamus data, bukan dalam UC-04 teks).
@@ -311,7 +312,7 @@ tepat seperti kamus data). Ini keputusan skop untuk Kalll — bukan bug teknikal
 
 ---
 
-## 6. API Endpoints (Disahkan — 31 route, semua dalam `Backend/server.js`)
+## 6. API Endpoints (Disahkan — 32 route, semua dalam `Backend/server.js`)
 
 Semua endpoint berprefiks `/api/`. Port lalai `5000`. **Semua route bawah ini disahkan
 mempunyai `verifyToken`** (tiada lagi route yang "terlepas" middleware ini — isu ini
@@ -327,10 +328,9 @@ telah diperbetulkan sejak nota audit terdahulu).
 |---|---|---|---|
 | POST | `/api/orders` | Manager | F2.1, F2.2, UC-03 |
 | GET | `/api/orders` | Manager | F2.4 |
+| PATCH | `/api/orders/:id/status` | Manager | F2.3, UC-11 — validasi terhadap 4 ENUM status, ditambah 2026-07-02 (§12 #1 selesai) |
 
-> ⚠️ **Tiada `PUT`/`PATCH /api/orders/:id`.** Lihat §12, Keutamaan Tinggi #1 — F2.3
-> dan UC-11 (Mengemas Kini Status Tempahan) tidak mempunyai laluan API.
-> Tiada juga `GET /api/orders/:id` — paparan detail kemungkinan guna data yang
+> Tiada `GET /api/orders/:id` — paparan detail guna data yang
 > sudah dimuatkan pada senarai (client-side), memadai untuk skala semasa.
 
 ### Staf
@@ -370,7 +370,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | PUT | `/api/tasks/:id` | Manager | F3.4 — **tiada semakan konflik cuti** (lihat §12 #6) |
 | POST | `/api/tasks/confirm` | Manager | Sahkan draf → `approval_status = 'Confirmed'` |
 | DELETE | `/api/tasks/:id` | Manager | Padam draf sahaja (reset ke kolam belum diagih, bukan hard-delete) |
-| PATCH | `/api/tasks/:id/status` | Staff atau Manager | F4.3, F4.4, UC-08 — semak pemilikan (`staffId`), terima `status` + `file` (multer). **Tidak terima `notes`** (§12 #2) |
+| PATCH | `/api/tasks/:id/status` | Staff atau Manager | F4.3, F4.4, UC-08 — semak pemilikan (`staffId`), terima `status` + `file` (multer) + `notes` → `staff_notes` (§12 #2 selesai, 2026-07-02) |
 | GET | `/api/staff/tasks/:staff_id` | Staff atau Manager | F4.1, F4.2, UC-07 |
 
 ### Dashboard
@@ -396,7 +396,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 |---|---|---|---|
 | F1–F1.4 | Log masuk ikut peranan, mesej ralat, redirect | ✅ Patuh | `POST /api/login`, JWT, `PrivateRoute`/`StaffPrivateRoute` |
 | F2.1–F2.2 | Daftar Tempahan (butiran, jenis penghantaran) | ✅ Patuh | `POST /api/orders` |
-| F2.3 | Kemas kini status percetakan (tender luar) | ❌ **Tiada** | Tiada route kemas kini status order — §12 #1 |
+| F2.3 | Kemas kini status percetakan (tender luar) | ✅ Patuh | `PATCH /api/orders/:id/status` + dropdown modal `Tempahan.jsx` (2026-07-02) |
 | F2.4 | Papar senarai penuh tempahan + status | ✅ Patuh | `GET /api/orders` |
 | F3.1–F3.2 | Jana tugasan (Reka Bentuk/Bungkus/Hantar), tetapkan staf & masa | ✅ Patuh | Round-Robin + Gemini AI, dua-dua ada |
 | F3.3 | Semak status cuti staf sebelum tetapkan tugasan | ⚠️ **Separa** | Lengkap pada laluan AI; *hari-ini-sahaja* pada Round-Robin; **tiada** pada edit manual (§12 #6) |
@@ -410,9 +410,9 @@ telah diperbetulkan sejak nota audit terdahulu).
 | F5.4 | Pengurus lulus/tolak cuti | ✅ Patuh | `PUT /api/manager/leaves/:id`, ada `rejection_reason` |
 | F6.1 | Papar profil (nama, jawatan, emel) | ⚠️ **Separa** | Teks/data ✅; **gambar profil ❌** — §12 #3 |
 | F6.2 | Tukar kata laluan | ✅ Patuh | `PUT /api/staff/change-password/:userId`, `PUT /api/admin/update/:userId` |
-| *(Jadual 3.1)* | *"Staf boleh menambah nota catatan pada tugasan"* | ❌ **Tiada** | UI kutip data, tapi tak sampai DB — §12 #2 |
+| *(Jadual 3.1)* | *"Staf boleh menambah nota catatan pada tugasan"* | ✅ Patuh | Laluan penuh DB→backend→frontend (2026-07-02) — §12 #2 selesai |
 
-**Ringkasan:** 12/17 patuh penuh, 3 separa, 2 tiada langsung.
+**Ringkasan:** 14/17 patuh penuh, 3 separa, 0 tiada langsung.
 
 ---
 
@@ -422,15 +422,15 @@ telah diperbetulkan sejak nota audit terdahulu).
 |---|---|---|---|
 | UC-01 | Log Sesi Pengguna | ✅ Patuh | |
 | UC-02 | Mengurus Akaun Staf | ⚠️ Separa | Tambah + padam ✅; gambar profil ❌; "Kemaskini" penuh tak jelas (§6) |
-| UC-03 | Menambah Tempahan | ⚠️ **Berisiko rosak** | Logik ✅ tapi bug case-sensitivity aktif — §12 #4 |
+| UC-03 | Menambah Tempahan | ✅ Patuh | Bug case-sensitivity dibetulkan (§12 #4 selesai, 2026-07-02) |
 | UC-04 | Menjana & Kemaskini Tugasan | ✅ Patuh (+ lebih) | Draf-sahkan tidak dalam spek asal tapi selamat & berfungsi |
 | UC-05 | Meluluskan Cuti | ✅ Patuh | |
 | UC-06 | Paparan Papan Muka | ✅ Patuh | + ciri tambahan (donut, trend) tiada dalam FYP asal |
 | UC-07 | Melihat Tugasan Harian | ✅ Patuh | |
-| UC-08 | Mengemas Kini Status Tugasan | ⚠️ Separa | Status + bukti kerja ✅; nota/catatan ❌ |
+| UC-08 | Mengemas Kini Status Tugasan | ✅ Patuh | Status + bukti kerja + nota/catatan (§12 #2 selesai, 2026-07-02) |
 | UC-09 | Memohon Cuti | ✅ Patuh | |
 | UC-10 | Mengurus Profil Diri | ⚠️ Separa | Emel/telefon/kata laluan ✅; gambar profil ❌ |
-| UC-11 | Mengemas Kini Status Tempahan | ❌ **Tiada** | Tiada endpoint langsung — §12 #1 |
+| UC-11 | Mengemas Kini Status Tempahan | ✅ Patuh | `PATCH /api/orders/:id/status` + dropdown modal (2026-07-02, §12 #1 selesai) |
 
 ---
 
@@ -439,7 +439,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 **(a) Kebolehgunaan** — Antara muka responsif, semua teks Bahasa Melayu, portal
 mudah alih-mesra untuk Staf. Tiada isu ketara dikesan semasa audit kod.
 
-**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 31/31 route
+**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 32/32 route
 bergerbang). Kata laluan di-hash bcrypt (disahkan `seed.js` + route tukar kata
 laluan). **Tetapi**: JWT secret ada fallback hardcode terdedah dalam repo awam
 (§3.1) — ini secara langsung bertentangan dengan semangat 3.4.1(b) walaupun bukan
@@ -465,9 +465,10 @@ secara statik — perlu ujian beban sebenar jika hendak dilaporkan dalam FYP.
   (`DELETE /api/staff/:id`, ada pengesahan + halang padam sendiri). **"Kemaskini"**
   pada carta alir tiada padanan route penuh — lihat §6, §12.
 - **Tempahan:** `Paparan Senarai Tempahan` (`GET /api/orders`) → `Baru` →
-  `Isi Borang` → `Simpan Tempahan` (`POST /api/orders`, ⚠️ bug case-sensitivity).
+  `Isi Borang` → `Simpan Tempahan` (`POST /api/orders`).
   Cabang **"Status → Lihat Detail → Ubah Status Cetakan → Simpan Status Cetakan"**
-  **tiada padanan backend langsung** — §12 #1.
+  kini disokong `PATCH /api/orders/:id/status` melalui dropdown pada modal
+  "Perincian Tempahan" (§12 #1 selesai, 2026-07-02).
 
 ### 10.3 Cuti + Janaan Jadual (carta alir Admin)
 - **Cuti:** `Paparan Senarai Cuti` (`GET /api/manager/leaves`) → semak dokumen →
@@ -482,8 +483,8 @@ secara statik — perlu ujian beban sebenar jika hendak dilaporkan dalam FYP.
 `Tugasan` → `Lihat Senarai Tugasan` (`GET /api/staff/tasks/:staff_id`) →
 `Kemaskini?` → `Input Status & Muat Naik Bukti` (`PATCH /api/tasks/:id/status`).
 **Nota:** carta alir tidak tunjukkan medan nota/catatan secara eksplisit, tetapi
-Jadual 3.1 (keperluan pengguna) ada nyatakannya — dan UI sebenar (`TugasanStaf.jsx`)
-sudah bina medan itu tanpa backend menyokongnya (§12 #2).
+Jadual 3.1 (keperluan pengguna) ada nyatakannya — medan nota kini disokong
+hujung-ke-hujung (§12 #2 selesai, 2026-07-02).
 `Mohon Cuti` dan `Profil` — padan carta alir sepenuhnya dengan route berkaitan.
 
 ---
@@ -546,23 +547,24 @@ satu-commit sedia ada).
 
 ### 🔴 Keutamaan Tinggi
 
-**#1 — Tiada endpoint kemas kini status Tempahan (F2.3, F2.4, UC-11)**
-Tiada `PUT`/`PATCH /api/orders/:id` di mana-mana dalam `server.js`. Hanya
-`POST` (cipta) dan `GET` (senarai) wujud untuk `orders`. Seluruh UC-11
-("Mengemas Kini Status Tempahan" — cth. Dihantar untuk Dicetak → Hasil Cetakan
-Diterima) tiada sokongan API. Perlu: route baharu + UI pada `Tempahan.jsx`
-(atau halaman detail tempahan) untuk tukar `status`.
+**#1 — ✅ SELESAI (2026-07-02) — Endpoint kemas kini status Tempahan (F2.3, UC-11)**
+`PATCH /api/orders/:id/status` ditambah dalam `server.js` (guard
+`verifyToken` + `requireRole('Manager')`, validasi terhadap 4 nilai ENUM
+`Pending`/`In Progress`/`Completed`/`Cancelled`, 404 jika ID tak wujud).
+UI: dropdown status pada modal "Perincian Tempahan" (`Tempahan.jsx`,
+`handleUpdateStatus`) — kemaskini `selectedOrder` dan senarai `orders`
+serentak tanpa refresh, ralat backend dipaparkan melalui `alert`.
 
-**#2 — Nota/catatan tugasan staf hilang senyap (Jadual 3.1)**
-Tiga lapisan: (a) `tasks` tiada lajur nota; (b) `PATCH /api/tasks/:id/status`
-tidak baca/tulis medan nota; (c) `Frontend/src/pages/staff/TugasanStaf.jsx`
-`handleSave()` (~baris 176–184) **sudah** bina UI + state `form.notes` dan
-placeholder "Tambah nota atau catatan...", tapi `FormData` yang dihantar
-cuma `status` + `file` — `notes` terus dibuang sebelum sampai ke rangkaian.
-Ini paling teruk berbanding ciri hilang biasa: staf nampak medan, taip nota,
-tekan simpan, dapat mesej "berjaya" — padahal nota tak pernah sampai DB.
-Perlu: lajur `staff_notes` (migrasi baharu, ikut corak `add_task_attachment.sql`),
-backend terima & simpan, frontend hantar dalam `formData.append('notes', …)`.
+**#2 — ✅ SELESAI (2026-07-02) — Nota/catatan tugasan staf (Jadual 3.1)**
+Ketiga-tiga lapisan dilengkapkan: (a) lajur `staff_notes TEXT NULL` ditambah
+— migrasi `Backend/migrations/add_task_staff_notes.sql` **dan** `schema.sql`
+dikemaskini serentak; (b) `PATCH /api/tasks/:id/status` kini destructure
+`notes` dan simpan `staff_notes` (nilai `notes || null` — kekal pilihan,
+tukar status tanpa nota masih sah); (c) `TugasanStaf.jsx` `handleSave()`
+hantar `formData.append('notes', …)` dan kemaskini `staff_notes` dalam
+state `tasks` selepas berjaya. `openModal()` sedia pra-isi textarea daripada
+`task.staff_notes`, dan `GET /api/staff/tasks/:staff_id` guna `tasks.*` —
+nota tersimpan muncul semula bila tugasan dibuka.
 
 **#3 — JWT secret fallback hardcode (3.4.1.b)**
 `middleware/auth.js`, `server.js`, dan `tests/login.test.js` semua guna
@@ -571,13 +573,11 @@ backend terima & simpan, frontend hantar dalam `formData.append('notes', …)`.
 ini kekal dalam kod sebagai selamat-gagal untuk dev, tapi risiko jika terlupa
 tetapkan pada persekitaran demo/produksi memandangkan repo bersifat awam.
 
-**#4 — Bug case-sensitivity `Orders` masih aktif separa (UC-03)**
-Commit terkini (`4443080`, hari ini) betulkan `GET /api/orders` (`FROM Orders`
-→ `FROM orders`) tetapi **terlepas** `POST /api/orders` — baris 169 `server.js`
-masih `INSERT INTO Orders` (huruf besar). Pada MySQL/Linux case-sensitive
-(`lower_case_table_names=0`), cipta Tempahan baharu akan gagal walaupun
-senarai tempahan berfungsi. Pembetulan satu baris, tapi ini fungsi teras
-(F2.1) yang **rosak dalam sesetengah persekitaran sekarang juga**.
+**#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
+`INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`
+(`server.js`). Disahkan tiada lagi rujukan `Orders` huruf besar dalam
+mana-mana SQL (`FROM|INTO|UPDATE|JOIN`). Diuji sebenar: POST cipta tempahan
+berjaya dan GET senarai masih berfungsi (instance ujian + MySQL langsung).
 
 ### 🟡 Keutamaan Sederhana
 
@@ -735,7 +735,7 @@ dan 5 akaun staf `Staff@1234`). Fail lama yang dirujuk `CLAUDE.md` (`database.sq
 | Tugasan | jadual `tasks`, laluan `/api/tasks/*` |
 | Cuti | jadual `leaves`, laluan `/api/*/leaves*` |
 | Janaan Jadual | `JanaanJadual.jsx`, `/api/generate-schedule` (Round-Robin) + `/api/manager/auto-assign` (AI) |
-| Status Percetakan / Tender Luar | `orders.status`, `orders.delivery_type` — **tiada laluan kemas kini**, §12 #1 |
+| Status Percetakan / Tender Luar | `orders.status`, `orders.delivery_type` — kemas kini melalui `PATCH /api/orders/:id/status` (§12 #1 selesai) |
 | Belum Mula / Dalam Proses / Selesai (paparan) | DB: `Pending` / `In Progress` / `Completed` |
 | Lulus / Gagal (paparan cuti) | DB: `Approved` / `Rejected` |
 
