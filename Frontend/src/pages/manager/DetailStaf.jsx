@@ -23,6 +23,11 @@ export default function DetailStaf() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef(null);
 
+  const [isEditing, setIsEditing]   = useState(false);
+  const [editName, setEditName]     = useState('');
+  const [editRole, setEditRole]     = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
   // ── Ambil profil staf (silent = tiada spinner, untuk auto-refresh senyap) ──
   const fetchStaffDetail = useCallback(async (silent = false) => {
     try {
@@ -72,6 +77,27 @@ export default function DetailStaf() {
     } finally {
       setUploadingPhoto(false);
       if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  }
+
+  // ── Edit penuh maklumat staf (nama + jawatan) ──
+  function startEditing() {
+    setEditName(staff.name || '');
+    setEditRole(staff.role || '');
+    setIsEditing(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!editName || !editRole) return;
+    setSavingEdit(true);
+    try {
+      await axios.put(`${API_BASE_URL}/api/staff/${id}`, { name: editName, role: editRole });
+      setStaff(prev => ({ ...prev, name: editName, role: editRole }));
+      setIsEditing(false);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Gagal mengemaskini maklumat staf.');
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -172,17 +198,82 @@ export default function DetailStaf() {
           </button>
 
 
-          <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0F172A', margin: '0 0 4px 0' }}>
-            {staff.name}
-          </h2>
-          
-          <p style={{ fontSize: '13px', color: '#64748B', fontWeight: '600', marginBottom: '16px', margin: 0, fontFamily: 'monospace' }}>
-            {staff.username || staffIdCode}
-          </p>
+          {isEditing ? (
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '32px' }}>
+              <input
+                type="text"
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                placeholder="Nama penuh"
+                disabled={savingEdit}
+                style={{
+                  width: '100%', padding: '9px 12px', fontSize: '14px', fontWeight: 600,
+                  border: '1.5px solid #E2E8F0', borderRadius: '8px', textAlign: 'center',
+                  boxSizing: 'border-box', fontFamily: 'inherit'
+                }}
+              />
+              <select
+                value={editRole}
+                onChange={e => setEditRole(e.target.value)}
+                disabled={savingEdit}
+                style={{
+                  width: '100%', padding: '9px 12px', fontSize: '13px',
+                  border: '1.5px solid #E2E8F0', borderRadius: '8px',
+                  boxSizing: 'border-box', fontFamily: 'inherit'
+                }}
+              >
+                <option value="" disabled>Pilih Peranan...</option>
+                <option value="Designer">Designer</option>
+                <option value="Operator Mesin (Banner/Bunting)">Operator Mesin (Banner/Bunting)</option>
+                <option value="Operator Digital">Operator Digital</option>
+                <option value="Finishing">Finishing</option>
+                <option value="Pengurusan / Admin">Pengurusan / Admin</option>
+              </select>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn btn--primary"
+                  style={{ flex: 1 }}
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit || !editName || !editRole}
+                >
+                  {savingEdit ? 'Menyimpan...' : 'Simpan'}
+                </button>
+                <button
+                  className="btn btn--secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setIsEditing(false)}
+                  disabled={savingEdit}
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0F172A', margin: '0 0 4px 0' }}>
+                {staff.name}
+              </h2>
 
-          <span className="badge badge--info" style={{ padding: '6px 14px', fontSize: '13px', marginBottom: '32px' }}>
-            {staff.role || 'Tiada Peranan'}
-          </span>
+              <p style={{ fontSize: '13px', color: '#64748B', fontWeight: '600', marginBottom: '16px', margin: 0, fontFamily: 'monospace' }}>
+                {staff.username || staffIdCode}
+              </p>
+
+              <span className="badge badge--info" style={{ padding: '6px 14px', fontSize: '13px', marginBottom: '12px' }}>
+                {staff.role || 'Tiada Peranan'}
+              </span>
+
+              <button
+                type="button"
+                onClick={startEditing}
+                style={{
+                  background: 'none', border: 'none', color: '#2563EB', fontSize: '12px',
+                  fontWeight: 600, cursor: 'pointer', marginBottom: '32px', padding: 0
+                }}
+              >
+                Edit Maklumat
+              </button>
+            </>
+          )}
 
           <div style={{ width: '100%', marginTop: 'auto', borderTop: '1px solid #E2E8F0', paddingTop: '24px' }}>
             {deleteError && (
