@@ -569,6 +569,30 @@ app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (r
     }
 });
 
+// Endpoint untuk kemaskini penuh maklumat staf oleh Admin (UC-02: nama + jawatan)
+app.put('/api/staff/:id', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const staffId = req.params.id;
+        const { name, role } = req.body;
+
+        if (!name || !role) {
+            return res.status(400).json({ error: 'Nama dan peranan wajib diisi.' });
+        }
+
+        const [result] = await db.query(
+            `UPDATE staff SET full_name = ?, job_title = ? WHERE id = ?`,
+            [name, role, staffId]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Staf tidak dijumpai.' });
+        }
+        res.status(200).json({ message: 'Maklumat staf berjaya dikemaskini.', name, role });
+    } catch (err) {
+        console.error('Ralat PUT /api/staff/:id:', err);
+        res.status(500).json({ error: 'Gagal mengemaskini maklumat staf.' });
+    }
+});
+
 // Endpoint untuk muat naik gambar profil staf (F6.1, UC-02, UC-10)
 app.post('/api/staff/:id/profile-picture', verifyToken, requireRole('Staff', 'Manager'), uploadStaffPhoto('photo'), async (req, res) => {
     try {
@@ -663,7 +687,7 @@ app.post('/api/leaves', verifyToken, requireRole('Manager'), async (req, res) =>
             return res.status(400).json({ error: "Tarikh tamat tidak boleh lebih awal daripada tarikh mula." });
         }
 
-        const sql = `INSERT INTO Leaves (staff_id, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, 'Pending')`;
+        const sql = `INSERT INTO leaves (staff_id, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, 'Pending')`;
         const [result] = await db.query(sql, [staff_id, start_date, end_date, reason]);
         res.status(201).json({ message: "Cuti berjaya direkodkan!", leaveId: result.insertId });
     } catch (err) {

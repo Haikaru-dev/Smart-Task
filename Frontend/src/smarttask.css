@@ -487,10 +487,6 @@ body {
     background: linear-gradient(145deg, #064E3B 0%, #059669 55%, #10B981 100%);
 }
 
-.kpi-card--cyan {
-    background: linear-gradient(145deg, #0C4A6E 0%, #0284C7 55%, #06B6D4 100%);
-}
-
 .kpi-card--red {
     background: linear-gradient(145deg, #7F1D1D 0%, #DC2626 55%, #EF4444 100%);
 }

@@ -33,7 +33,7 @@ function PrivateRoute({ children }) {
     try { return JSON.parse(localStorage.getItem('user') || 'null'); }
     catch { return null; }
   })();
-  const isManager = userData?.role === 'Manager' || userData?.role === 'Admin';
+  const isManager = userData?.role === 'Manager';
   return (token && isManager) ? children : <Navigate to="/login" replace />;
 }
 

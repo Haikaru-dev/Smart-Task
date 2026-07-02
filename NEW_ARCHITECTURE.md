@@ -188,7 +188,7 @@ Pengurus, seperti pendaftaran tempahan dan penjanaan jadual."*
 | Mohon Cuti | — | ✅ | `requireRole('Staff','Manager')` |
 | Kemaskini profil sendiri | ✅ | ✅ | `requireRole('Staff','Manager')` |
 
-Status: **RBAC dikuatkuasakan konsisten pada peringkat backend untuk semua 33 route**
+Status: **RBAC dikuatkuasakan konsisten pada peringkat backend untuk semua 34 route**
 (disahkan — lihat §6). Ini ialah salah satu bahagian sistem yang **paling patuh**
 berbanding keperluan 3.4.1(b).
 
@@ -324,7 +324,7 @@ tepat seperti kamus data). Ini keputusan skop untuk Kalll — bukan bug teknikal
 
 ---
 
-## 6. API Endpoints (Disahkan — 33 route, semua dalam `Backend/server.js`)
+## 6. API Endpoints (Disahkan — 34 route, semua dalam `Backend/server.js`)
 
 Semua endpoint berprefiks `/api/`. Port lalai `5000`. **Semua route bawah ini disahkan
 mempunyai `verifyToken`** (tiada lagi route yang "terlepas" middleware ini — isu ini
@@ -351,17 +351,16 @@ telah diperbetulkan sejak nota audit terdahulu).
 | GET | `/api/staff` | Manager | Jadual 3.1 (Admin lihat senarai staf) |
 | POST | `/api/staff` | Manager | UC-02 |
 | GET | `/api/staff/:id` | Staff **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga |
+| PUT | `/api/staff/:id` | Manager | UC-02 — kemaskini penuh (nama + jawatan) oleh Admin, UI edit-in-place pada `DetailStaf.jsx` (ditambah 2026-07-02) |
 | DELETE | `/api/staff/:id` | Manager | UC-02 (alt: "Padam Staf") — ada guard halang padam akaun sendiri |
 | POST | `/api/staff/:id/profile-picture` | Staff (sendiri) atau Manager | F6.1, UC-02, UC-10 — multer berasingan (JPG/PNG, had 2MB, folder `/uploads/staff/`), fail dipadam jika 403/404 (§12 #5) |
 | PUT | `/api/staff/update-profile/:id` | Staff atau Manager | F6.1/F6.2, UC-10 (had: email + phone sahaja) |
 | PUT | `/api/staff/change-password/:userId` | Staff atau Manager | F6.2, UC-10 |
 
-> ⚠️ **Tiada `PUT /api/staff/:id` untuk kemas kini penuh (nama/jawatan) oleh Admin.**
-> Carta alir (Rajah aliran "Urus Staf") tunjukkan kotak "Kemaskini / Padam Staf",
-> tetapi teks UC-02 sendiri hanya sebut butang "Kembali" atau "Padam Staf" dalam
-> aliran alternatif — jadi dokumen sumber FYP sendiri kurang jelas di sini. Sahkan
-> dengan Kalll sama ada "Kemaskini" bermaksud edit penuh atau sekadar view sebelum
-> teruskan kerja pada bahagian ini.
+> ✅ *(Selesai 2026-07-02)* Kekaburan "Kemaskini" dalam UC-02 telah diputuskan:
+> Admin boleh **edit penuh** (nama + jawatan) staf sedia ada melalui
+> `PUT /api/staff/:id` dan borang edit-in-place pada kad profil `DetailStaf.jsx`
+> (dropdown jawatan sama seperti borang Tambah Staf).
 
 ### Cuti (Leaves)
 | Kaedah | Endpoint | Guard | F / UC |
@@ -436,7 +435,7 @@ terdahulu "12/17 + 3 separa" tersilap kira; jadual sentiasa jadi rujukan.)*
 | UC | Nama | Status | Nota |
 |---|---|---|---|
 | UC-01 | Log Sesi Pengguna | ✅ Patuh | |
-| UC-02 | Mengurus Akaun Staf | ⚠️ Separa | Tambah + padam + gambar profil ✅; "Kemaskini" penuh (nama/jawatan) masih tak jelas dalam FYP (§6) |
+| UC-02 | Mengurus Akaun Staf | ✅ Patuh | Tambah + kemaskini penuh + padam + gambar profil, semuanya lengkap (2026-07-02) |
 | UC-03 | Menambah Tempahan | ✅ Patuh | Bug case-sensitivity dibetulkan (§12 #4 selesai, 2026-07-02) |
 | UC-04 | Menjana & Kemaskini Tugasan | ✅ Patuh (+ lebih) | Draf-sahkan tidak dalam spek asal tapi selamat & berfungsi |
 | UC-05 | Meluluskan Cuti | ✅ Patuh | |
@@ -454,7 +453,7 @@ terdahulu "12/17 + 3 separa" tersilap kira; jadual sentiasa jadi rujukan.)*
 **(a) Kebolehgunaan** — Antara muka responsif, semua teks Bahasa Melayu, portal
 mudah alih-mesra untuk Staf. Tiada isu ketara dikesan semasa audit kod.
 
-**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 33/33 route
+**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 34/34 route
 bergerbang). Kata laluan di-hash bcrypt (disahkan `seed.js` + route tukar kata
 laluan). **Tetapi**: JWT secret ada fallback hardcode terdedah dalam repo awam
 (§3.1) — ini secara langsung bertentangan dengan semangat 3.4.1(b) walaupun bukan
@@ -476,9 +475,10 @@ secara statik — perlu ujian beban sebenar jika hendak dilaporkan dalam FYP.
 
 ### 10.2 Urus Staf + Tempahan (carta alir Admin, dua lajur)
 - **Urus Staf:** `Paparan Senarai Staf` (`GET /api/staff`) → `Tambah` (`POST /api/staff`)
-  atau `Detail` → `Lihat Profil Staf` (`GET /api/staff/:id`) → `Padam Staf`
-  (`DELETE /api/staff/:id`, ada pengesahan + halang padam sendiri). **"Kemaskini"**
-  pada carta alir tiada padanan route penuh — lihat §6, §12.
+  atau `Detail` → `Lihat Profil Staf` (`GET /api/staff/:id`) → `Kemaskini`
+  (`PUT /api/staff/:id`, edit-in-place nama + jawatan — selesai 2026-07-02) atau
+  `Padam Staf` (`DELETE /api/staff/:id`, ada pengesahan + halang padam sendiri).
+  Carta alir "Urus Staf" kini padan sepenuhnya.
 - **Tempahan:** `Paparan Senarai Tempahan` (`GET /api/orders`) → `Baru` →
   `Isi Borang` → `Simpan Tempahan` (`POST /api/orders`).
   Cabang **"Status → Lihat Detail → Ubah Status Cetakan → Simpan Status Cetakan"**
@@ -642,19 +642,20 @@ tiada perubahan logik) dan kini dipanggil oleh ketiga-tiga laluan:
 **#7** — Tiada jadual `Pengurus` berasingan (Kamus Data 3.19) — keputusan
 reka bentuk, perlu diselaraskan dengan laporan FYP (§5.6), bukan bug.
 
-**#8** — `Frontend/src/pages/manager/PengurusanCuti.jsx` — disahkan **anak
-yatim** (tiada import/route ke fail ini di mana-mana). Guna `Cuti.jsx` untuk
-kelulusan cuti Admin. **Jangan** sambungkan logik baharu ke fail ini.
+**#8 — ✅ SELESAI (2026-07-02)** — `Frontend/src/pages/manager/PengurusanCuti.jsx`
+disahkan semula anak yatim (grep: tiada import/route di mana-mana dalam
+`Frontend/src`) dan **dipadam**. Guna `Cuti.jsx` untuk kelulusan cuti Admin.
 
-**#9** — CSS mati: `.kpi-card--cyan` dan `.kpi-card--red` (`smarttask.css`
-baris 424, 428) tak lagi dirujuk selepas kad "Staf Aktif"/"Staf Cuti" ditukar
-ke `.kpi-card--neutral` (perbaikan sudah dibuat — lihat §0.2/§13, hanya CSS
-lama tak dibuang).
+**#9 — ✅ SELESAI SEPARA (2026-07-02)** — `.kpi-card--cyan` disahkan CSS mati
+dan **dibuang**. ⚠️ **Pembetulan audit:** `.kpi-card--red` **BUKAN CSS mati** —
+masih dirujuk oleh kad KPI "Staf Bercuti Hari Ini" di `Cuti.jsx:125` (halaman
+aktif, route `/cuti`), jadi ia **dikekalkan**. Hanya kad Dashboard yang
+bertukar ke `.kpi-card--neutral`; premis audit asal yang mengatakan kedua-dua
+kelas tak dirujuk adalah silap.
 
-**#10** — `App.jsx` `PrivateRoute`: `isManager = role === 'Manager' || role
-=== 'Admin'` — cabang `'Admin'` mati kod (DB/JWT hanya pernah keluarkan
-`'Manager'`). Tidak menyebabkan bug, tapi selaraskan penamaan supaya tidak
-mengelirukan bila baca kod bersama istilah FYP "Admin (Pengurus)".
+**#10 — ✅ SELESAI (2026-07-02)** — `App.jsx` `PrivateRoute`: cabang mati kod
+`|| role === 'Admin'` dibuang; kini `isManager = userData?.role === 'Manager'`
+sahaja.
 
 **#11** — `CLAUDE.md` sedia ada perlu dikemas kini besar-besaran (§0.2) —
 bukan isu kod, tapi akan terus mengelirukan sesi Claude Code akan datang
@@ -677,10 +678,9 @@ Frontend/src/
 │   └── JsonLd.jsx               # Schema.org (SEO)
 └── pages/
     ├── manager/
-    │   ├── Login.jsx, Dashboard.jsx, Tempahan.jsx, TempahanBaru.jsx,
-    │   │   JanaanJadual.jsx, SenaraiStaf.jsx, DetailStaf.jsx, Cuti.jsx,
-    │   │   ProfilAdmin.jsx
-    │   └── PengurusanCuti.jsx  # ⚠️ ANAK YATIM — lihat §12 #8
+    │   └── Login.jsx, Dashboard.jsx, Tempahan.jsx, TempahanBaru.jsx,
+    │       JanaanJadual.jsx, SenaraiStaf.jsx, DetailStaf.jsx, Cuti.jsx,
+    │       ProfilAdmin.jsx
     └── staff/
         ├── LoginStaf.jsx, TugasanStaf.jsx, CutiStaf.jsx, ProfilStaf.jsx
 ```
@@ -756,10 +756,10 @@ dan 5 akaun staf `Staff@1234`). Fail lama yang dirujuk `CLAUDE.md` (`database.sq
 - **Sempadan "Jangan Sentuh" berterusan:**
   - Jangan tulis semula logik pemadanan kemahiran/beban kerja/konflik cuti Gemini
     (§11) — hanya lapisan validasi tambahan.
-  - Jangan sambung logik ke `PengurusanCuti.jsx` (anak yatim, §12 #8).
+  - `PengurusanCuti.jsx` sudah dipadam (anak yatim, §12 #8 — selesai 2026-07-02).
   - Jangan tambah `axios`/state ke ikon loceng dalam `Layout.jsx` — ia dekoratif
     dengan sengaja; guna mekanisme kad KPI untuk notifikasi cuti.
-  - Guna `Cuti.jsx` untuk pengurusan cuti Admin, bukan `PengurusanCuti.jsx`.
+  - Guna `Cuti.jsx` untuk pengurusan cuti Admin.
 - **Pemodulan `server.js`** (`routes/` berasingan) — masih ditangguh, disyorkan
   dijalankan **selepas** semua isu §12 dibetulkan (elak konflik gabung besar-besaran
   semasa logik masih berubah).
