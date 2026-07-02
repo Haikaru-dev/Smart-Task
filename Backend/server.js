@@ -201,7 +201,7 @@ app.post('/api/orders', verifyToken, requireRole('Manager'), async (req, res) =>
 app.get('/api/orders', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         // Susun data dari yang paling baharu (id paling besar) ke paling lama
-        const sql = `SELECT * FROM Orders ORDER BY id DESC`;
+        const sql = `SELECT * FROM orders ORDER BY id DESC`;
         const [results] = await db.query(sql);
 
         // Pulangkan senarai data dalam format JSON
