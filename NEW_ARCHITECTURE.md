@@ -156,13 +156,16 @@ Baris **bold** ialah dependency teras yang hilang daripada jadual tech stack ver
   `<StaffPrivateRoute>` (Staff) dalam `App.jsx`, semak token + role dalam
   `localStorage` sebelum benarkan akses laluan.
 
-**Risiko keselamatan disahkan (lihat §12, Keutamaan Tinggi):**
+**Risiko keselamatan (dimitigasi — lihat §12 #3):**
 ```js
 const JWT_SECRET = process.env.JWT_SECRET || 'smarttask_dev_secret_TUKAR_DI_PRODUKSI';
 ```
-Fallback ini wujud dalam `server.js`, `middleware/auth.js`, **dan** `tests/login.test.js`.
-Jika `.env` tidak menetapkan `JWT_SECRET`, string fallback inilah secret sebenar yang
-digunakan — dan ia boleh dibaca sesiapa sahaja dalam repo awam.
+Fallback ini wujud dalam `server.js`, `middleware/auth.js`, **dan** `tests/login.test.js`
+(dikekalkan sengaja untuk dev tempatan). Jika `.env` tidak menetapkan `JWT_SECRET`,
+string fallback inilah secret sebenar yang digunakan — dan ia boleh dibaca sesiapa
+sahaja dalam repo awam. Sejak 2026-07-02, `server.js` paparkan **amaran konsol**
+semasa startup bila `JWT_SECRET` tiada; tetapkan nilai rawak kuat (rujuk
+`Backend/.env.example`) sebelum demo/produksi.
 
 ---
 
@@ -566,12 +569,16 @@ state `tasks` selepas berjaya. `openModal()` sedia pra-isi textarea daripada
 `task.staff_notes`, dan `GET /api/staff/tasks/:staff_id` guna `tasks.*` —
 nota tersimpan muncul semula bila tugasan dibuka.
 
-**#3 — JWT secret fallback hardcode (3.4.1.b)**
-`middleware/auth.js`, `server.js`, dan `tests/login.test.js` semua guna
-`process.env.JWT_SECRET || 'smarttask_dev_secret_TUKAR_DI_PRODUKSI'`. Sahkan
-`.env` (root projek) benar-benar tetapkan `JWT_SECRET` rawak yang kuat; fallback
-ini kekal dalam kod sebagai selamat-gagal untuk dev, tapi risiko jika terlupa
-tetapkan pada persekitaran demo/produksi memandangkan repo bersifat awam.
+**#3 — ✅ DIMITIGASI (2026-07-02) — JWT secret fallback hardcode (3.4.1.b)**
+Amaran startup ditambah dalam `server.js` (selepas `dotenv.config`): jika
+`JWT_SECRET` tiada dalam `.env`, konsol paparkan amaran jelas merujuk
+`Backend/.env.example` — tanpa menghalang startup (dev tempatan kekal jalan).
+Fallback dalam `middleware/auth.js`/`server.js`/`tests/login.test.js`
+**sengaja dikekalkan** sebagai selamat-gagal dev. Disahkan semasa ujian:
+amaran muncul bila tiada, hilang bila ditetapkan.
+⚠️ **Tindakan pengguna masih perlu:** `.env` tempatan disahkan (2026-07-02)
+**belum** tetapkan `JWT_SECRET` — jana nilai rawak (arahan dalam
+`Backend/.env.example`) sebelum sebarang demo/produksi.
 
 **#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
 `INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`
@@ -669,7 +676,12 @@ Frontend/src/
 ## 14. Pembolehubah Persekitaran & Konfigurasi DB (Dibetulkan)
 
 Fail `.env` diletak di **root projek** (satu tahap atas `Backend/`), disahkan
-`.gitignore` (`*.env` tidak dikomit).
+`.gitignore` (`*.env` tidak dikomit). Templat rujukan: **`Backend/.env.example`**
+(lengkap, semua 7 pembolehubah + arahan jana `JWT_SECRET` rawak). ⚠️ Fail
+`.env.example` di **root** pula lapuk — hanya ada `DATABASE_URL` yang langsung
+tidak dibaca `db.js`; jangan rujuk fail itu (calon pemadaman/kemaskini).
+`server.js` kini paparkan amaran konsol semasa startup jika `JWT_SECRET`
+tidak ditetapkan (§12 #3).
 
 | Pembolehubah | Kegunaan | Lalai jika tiada |
 |---|---|---|

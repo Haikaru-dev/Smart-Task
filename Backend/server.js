@@ -14,6 +14,14 @@ const { verifyToken, requireRole } = require('./middleware/auth');
 // Muatkan pembolehubah persekitaran (environment variables)
 dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
+if (!process.env.JWT_SECRET) {
+    console.warn(
+        '\n⚠️  AMARAN: JWT_SECRET tidak ditetapkan dalam .env — sistem guna ' +
+        'fallback awam yang tidak selamat. Tetapkan sebelum guna dalam ' +
+        'demo/produksi (rujuk Backend/.env.example).\n'
+    );
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
