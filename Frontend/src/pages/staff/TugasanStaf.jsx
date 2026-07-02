@@ -4,6 +4,7 @@ import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
 import Pagination from '../../components/Pagination';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const FolderIcon = () => (
@@ -94,33 +95,43 @@ export default function TugasanStaf() {
   const [leaveHistory, setLeaveHistory] = useState([]);
   const [leavesLoading, setLeavesLoading] = useState(false);
 
-  // ── Ambil tugasan staf ──
-  const fetchTasks = useCallback(async () => {
+  // ── Ambil tugasan staf (silent = tiada spinner, untuk auto-refresh senyap) ──
+  const fetchTasks = useCallback(async (silent = false) => {
     if (!staffId) { setLoading(false); return; }
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
       const res = await axios.get(`${API_BASE_URL}/api/staff/tasks/${staffId}`);
       setTasks(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ralat fetchTasks:', err);
-      setError('Gagal memuatkan tugasan. Semak sambungan backend.');
+      if (!silent) setError('Gagal memuatkan tugasan. Semak sambungan backend.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  }, [staffId]);
+
+  // ── Ambil sejarah cuti ringkas (silent = tiada spinner) ──
+  const fetchLeaveHistory = useCallback(async (silent = false) => {
+    if (!staffId) return;
+    if (!silent) setLeavesLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/staff/leaves/${staffId}`);
+      setLeaveHistory(Array.isArray(res.data) ? res.data.slice(0, 5) : []);
+    } catch {
+      if (!silent) setLeaveHistory([]);
+    } finally {
+      if (!silent) setLeavesLoading(false);
     }
   }, [staffId]);
 
   useEffect(() => {
     fetchTasks();
-    // Ambil 5 sejarah cuti terkini untuk paparan ringkas
-    if (staffId) {
-      setLeavesLoading(true);
-      axios.get(`${API_BASE_URL}/api/staff/leaves/${staffId}`)
-        .then(res => setLeaveHistory(Array.isArray(res.data) ? res.data.slice(0, 5) : []))
-        .catch(() => setLeaveHistory([]))
-        .finally(() => setLeavesLoading(false));
-    }
-  }, [fetchTasks, staffId]);
+    fetchLeaveHistory();
+  }, [fetchTasks, fetchLeaveHistory]);
+
+  // ── Auto-refresh: tugasan & sejarah cuti kekal terkini tanpa reload ──
+  useAutoRefresh(() => { fetchTasks(true); fetchLeaveHistory(true); });
 
   // ── Metrik dikira secara dinamik ──
   const countNew        = tasks.filter(t => t.status?.toLowerCase() === 'pending').length;

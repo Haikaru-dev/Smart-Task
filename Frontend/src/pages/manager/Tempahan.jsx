@@ -9,6 +9,7 @@ import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
 import Pagination from '../../components/Pagination';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 // Helper: tentukan badge class dari status
 function getBadgeClass(status = '') {
@@ -31,23 +32,28 @@ export default function Tempahan() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    async function fetchOrders() {
-      try {
-        setLoading(true);
-        const response = await axios.get(`${API_BASE_URL}/api/orders`);
-        // Pangkalan data kadangkala menghantar dalam format response.data atau response.data.data
-        const data = response.data.data || response.data;
-        setOrders(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error('Ralat mengambil data tempahan:', err);
-        setError('Gagal memuat turun data tempahan. Sila pastikan backend sedang berjalan.');
-      } finally {
-        setLoading(false);
-      }
+  // ── Ambil data tempahan (silent = tiada spinner, untuk auto-refresh senyap) ──
+  async function fetchOrders(silent = false) {
+    try {
+      if (!silent) setLoading(true);
+      const response = await axios.get(`${API_BASE_URL}/api/orders`);
+      // Pangkalan data kadangkala menghantar dalam format response.data atau response.data.data
+      const data = response.data.data || response.data;
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Ralat mengambil data tempahan:', err);
+      if (!silent) setError('Gagal memuat turun data tempahan. Sila pastikan backend sedang berjalan.');
+    } finally {
+      if (!silent) setLoading(false);
     }
+  }
+
+  useEffect(() => {
     fetchOrders();
   }, []);
+
+  // ── Auto-refresh: tempahan baharu terus dipaparkan tanpa reload ──
+  useAutoRefresh(() => fetchOrders(true));
 
   // Fungsi mengawal Modal
   function handleOpenModal(order) {

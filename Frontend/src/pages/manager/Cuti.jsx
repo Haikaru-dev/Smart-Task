@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 import Pagination from '../../components/Pagination';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 // ── Helper: format tarikh DD/MM/YYYY ──
 function formatDate(dateStr) {
@@ -60,23 +61,26 @@ export default function Cuti() {
   // Pagination
   const [page, setPage] = useState(1);
 
-  // ── Ambil data cuti ──
-  async function fetchLeaves() {
+  // ── Ambil data cuti (silent = tiada spinner, untuk auto-refresh senyap) ──
+  async function fetchLeaves(silent = false) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await axios.get(`${API_BASE_URL}/api/leaves`);
       setLeaves(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ralat mengambil rekod cuti:', err);
-      setError('Gagal memuat turun rekod cuti.');
+      if (!silent) setError('Gagal memuat turun rekod cuti.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     fetchLeaves();
   }, []);
+
+  // ── Auto-refresh: papar permohonan cuti baru daripada staf tanpa perlu reload ──
+  useAutoRefresh(() => fetchLeaves(true));
 
   // ── Statistik kad ──
   const today = new Date().toISOString().slice(0, 10);

@@ -4,6 +4,7 @@ import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
 import Pagination from '../../components/Pagination';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 export default function SenaraiStaf() {
   const [staff, setStaff] = useState([]);
@@ -21,24 +22,27 @@ export default function SenaraiStaf() {
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Ambil Data Staf
-  async function fetchStaff() {
+  // Ambil Data Staf (silent = tiada spinner, untuk auto-refresh senyap)
+  async function fetchStaff(silent = false) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/api/staff`);
       const data = response.data.data || response.data;
       setStaff(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Ralat mengambil data staf:', err);
-      setError('Gagal memuat turun data staf.');
+      if (!silent) setError('Gagal memuat turun data staf.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     fetchStaff();
   }, []);
+
+  // ── Auto-refresh: senarai staf kekal terkini tanpa reload ──
+  useAutoRefresh(() => fetchStaff(true));
 
   // Buka panel detail staf
   const handleUserCellClick = async (staffId) => {
@@ -154,14 +158,14 @@ export default function SenaraiStaf() {
                 </tr>
               ) : (
                 paginatedStaff.map((s) => (
-                  <tr key={s.id}>
+                  <tr
+                    key={s.id}
+                    onClick={() => handleUserCellClick(s.id)}
+                    style={{ cursor: 'pointer' }}
+                    title="Lihat detail staf"
+                  >
                     <td>
-                      <div
-                        className="user-cell"
-                        onClick={() => handleUserCellClick(s.id)}
-                        style={{ cursor: 'pointer' }}
-                        title="Lihat detail staf"
-                      >
+                      <div className="user-cell">
                         <div className="user-initials-circle">
                           {s.name.substring(0, 2).toUpperCase()}
                         </div>

@@ -231,6 +231,72 @@ body {
     background: rgba(239, 68, 68, 0.06);
 }
 
+.sidebar-user-footer {
+    position: relative;
+}
+
+.sidebar-user-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sidebar-user-chevron {
+    flex-shrink: 0;
+    margin-left: auto;
+    transition: transform 0.15s;
+}
+
+.sidebar-user-footer:hover .sidebar-user-chevron {
+    transform: rotate(180deg);
+}
+
+.sidebar-user-dropdown {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 12px;
+    right: 12px;
+    background: #1E293B;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    z-index: 300;
+}
+
+.sidebar-user-footer:hover .sidebar-user-dropdown {
+    display: block;
+}
+
+.sidebar-user-dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.75);
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.sidebar-user-dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+}
+
+.sidebar-user-dropdown-item--danger {
+    color: rgba(239, 68, 68, 0.8);
+}
+
+.sidebar-user-dropdown-item--danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+}
+
 /* ============================================================
    MAIN AREA (kanan sidebar)
    ============================================================ */

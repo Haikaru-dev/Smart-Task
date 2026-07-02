@@ -1,5 +1,5 @@
 // src/components/StaffLayout.jsx
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import '../smarttask.css';
 
 // ── Ikon SVG ─────────────────────────────────────────────────────
@@ -20,21 +20,6 @@ const CalendarIcon = () => (
     <line x1="3" y1="10" x2="21" y2="10" />
   </svg>
 );
-const UserIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
-const LogoutIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
 const BellIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
     stroke="#64748B" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -47,7 +32,6 @@ const BellIcon = () => (
 const NAV_ITEMS = [
   { label: 'Tugasan Saya',      to: '/staf/tugasan',    Icon: ClipboardIcon },
   { label: 'Permohonan Cuti',   to: '/staf/cuti',       Icon: CalendarIcon  },
-  { label: 'Profil Saya',       to: '/staf/profil',     Icon: UserIcon      },
 ];
 
 // ── Breadcrumb map ────────────────────────────────────────────────
@@ -110,21 +94,30 @@ function StaffSidebar({ staffName, staffRole, onLogout }) {
       </nav>
 
       {/* ── Staff Info Footer ── */}
-      <div style={sidebarStyles.footer}>
-        <div style={sidebarStyles.footerAvatar}>
-          {getInitials(staffName)}
+      <div style={{ ...sidebarStyles.footer, position: 'relative' }} className="sidebar-user-footer">
+        <div className="sidebar-user-trigger" style={{ flex: 1, minWidth: 0 }}>
+          <div style={sidebarStyles.footerAvatar}>
+            {getInitials(staffName)}
+          </div>
+          <div style={sidebarStyles.footerInfo}>
+            <div style={sidebarStyles.footerName}>{staffName || 'Staf'}</div>
+            <div style={sidebarStyles.footerRole}>{staffRole || 'Pekerja'}</div>
+          </div>
+          <svg className="sidebar-user-chevron" width="12" height="12"
+            viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)"
+            strokeWidth={2} strokeLinecap="round">
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
         </div>
-        <div style={sidebarStyles.footerInfo}>
-          <div style={sidebarStyles.footerName}>{staffName || 'Staf'}</div>
-          <div style={sidebarStyles.footerRole}>{staffRole || 'Pekerja'}</div>
+        <div className="sidebar-user-dropdown">
+          <Link to="/staf/profil" className="sidebar-user-dropdown-item">
+            Kemaskini Profil
+          </Link>
+          <button className="sidebar-user-dropdown-item sidebar-user-dropdown-item--danger"
+            onClick={onLogout}>
+            Log Keluar
+          </button>
         </div>
-        <button
-          onClick={onLogout}
-          style={sidebarStyles.logoutBtn}
-          title="Log Keluar"
-        >
-          <LogoutIcon />
-        </button>
       </div>
     </aside>
   );
@@ -133,7 +126,7 @@ function StaffSidebar({ staffName, staffRole, onLogout }) {
 // ================================================================
 // KOMPONEN: Staff Topbar
 // ================================================================
-function StaffTopbar({ staffName, staffRole }) {
+function StaffTopbar() {
   const location = useLocation();
   const { parent, current } = getBreadcrumb(location.pathname);
 
@@ -146,32 +139,11 @@ function StaffTopbar({ staffName, staffRole }) {
         <span className="bc-item active">{current}</span>
       </div>
 
-      {/* Kanan: notif + profil staf */}
+      {/* Kanan: notif */}
       <div className="topbar-actions">
         <button className="topbar-icon-btn" title="Notifikasi">
           <BellIcon />
         </button>
-        <div className="topbar-divider" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Avatar */}
-          <div style={{
-            width: 36, height: 36, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #1E40AF, #2563EB)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0,
-          }}>
-            {getInitials(staffName)}
-          </div>
-          {/* Nama & Jawatan */}
-          <div style={{ lineHeight: 1.3 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>
-              {staffName || 'Staf'}
-            </div>
-            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>
-              {staffRole || 'Pekerja'}
-            </div>
-          </div>
-        </div>
       </div>
     </header>
   );
@@ -207,7 +179,7 @@ export default function StaffLayout() {
 
       {/* Kawasan Utama */}
       <main className="main-area" style={{ background: '#F4F6F9' }}>
-        <StaffTopbar staffName={staffName} staffRole={staffRole} />
+        <StaffTopbar />
         {/* Halaman aktif dirender di sini */}
         <Outlet />
       </main>

@@ -133,14 +133,27 @@ function Sidebar({ onLogout }) {
 
             {/* ── User Footer ── */}
             <div className="sidebar-user-footer">
-                <div className="sidebar-user-avatar">AD</div>
-                <Link to="/profil" className="sidebar-user-info" style={{ textDecoration: 'none' }}>
-                    <div className="sidebar-user-name">Admin</div>
-                    <div className="sidebar-user-role">Super Administrator</div>
-                </Link>
-                <button className="sidebar-logout-btn" onClick={onLogout}>
-                    Keluar
-                </button>
+                <div className="sidebar-user-trigger">
+                    <div className="sidebar-user-avatar">AD</div>
+                    <div className="sidebar-user-info">
+                        <div className="sidebar-user-name">Admin</div>
+                        <div className="sidebar-user-role">Super Administrator</div>
+                    </div>
+                    <svg className="sidebar-user-chevron" width="12" height="12"
+                        viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)"
+                        strokeWidth={2} strokeLinecap="round">
+                        <polyline points="18 15 12 9 6 15" />
+                    </svg>
+                </div>
+                <div className="sidebar-user-dropdown">
+                    <Link to="/profil" className="sidebar-user-dropdown-item">
+                        Kemaskini Profil
+                    </Link>
+                    <button className="sidebar-user-dropdown-item sidebar-user-dropdown-item--danger"
+                        onClick={onLogout}>
+                        Log Keluar
+                    </button>
+                </div>
             </div>
         </aside>
     );
@@ -172,18 +185,6 @@ function Topbar() {
                         <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                     </svg>
                 </button>
-
-                <div className="topbar-divider" />
-
-                {/* User */}
-                <Link to="/profil" className="topbar-user" style={{ textDecoration: 'none' }}>
-                    <div className="topbar-avatar">AD</div>
-                    <span className="topbar-username">Admin</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                        stroke="#94A3B8" strokeWidth={2} strokeLinecap="round">
-                        <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                </Link>
             </div>
         </header>
     );

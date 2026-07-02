@@ -1,8 +1,9 @@
 // src/pages/DetailStaf.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 export default function DetailStaf() {
   const { id } = useParams();
@@ -19,36 +20,40 @@ export default function DetailStaf() {
   const [isDeleting, setIsDeleting]       = useState(false);
   const [deleteError, setDeleteError]     = useState(null);
 
+  // ── Ambil profil staf (silent = tiada spinner, untuk auto-refresh senyap) ──
+  const fetchStaffDetail = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const response = await axios.get(`${API_BASE_URL}/api/staff/${id}`);
+      const data = response.data.data || response.data;
+      setStaff(data);
+    } catch (err) {
+      console.error('Ralat mengambil profil staf:', err);
+      if (!silent) setError('Gagal memuat turun profil staf. Profil mungkin tidak wujud.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [id]);
+
+  const fetchStaffTasks = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setTasksLoading(true);
+      const res = await axios.get(`${API_BASE_URL}/api/staff/tasks/${id}`);
+      setTasks(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      if (!silent) setTasks([]);
+    } finally {
+      if (!silent) setTasksLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
-    async function fetchStaffDetail() {
-      try {
-        setLoading(true);
-        const response = await axios.get(`${API_BASE_URL}/api/staff/${id}`);
-        const data = response.data.data || response.data;
-        setStaff(data);
-      } catch (err) {
-        console.error('Ralat mengambil profil staf:', err);
-        setError('Gagal memuat turun profil staf. Profil mungkin tidak wujud.');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    async function fetchStaffTasks() {
-      try {
-        setTasksLoading(true);
-        const res = await axios.get(`${API_BASE_URL}/api/staff/tasks/${id}`);
-        setTasks(Array.isArray(res.data) ? res.data : []);
-      } catch {
-        setTasks([]);
-      } finally {
-        setTasksLoading(false);
-      }
-    }
-
     fetchStaffDetail();
     fetchStaffTasks();
-  }, [id]);
+  }, [fetchStaffDetail, fetchStaffTasks]);
+
+  // ── Auto-refresh: profil & tugasan staf kekal terkini tanpa reload ──
+  useAutoRefresh(() => { fetchStaffDetail(true); fetchStaffTasks(true); });
 
   const handleDelete = async () => {
     try {

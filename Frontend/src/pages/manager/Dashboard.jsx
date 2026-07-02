@@ -5,6 +5,7 @@ import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
 import Pagination from '../../components/Pagination';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell
@@ -87,36 +88,41 @@ export default function Dashboard() {
 
   const navigate = useNavigate();
 
-  // ── Data Fetching ──
-  useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        setLoading(true);
+  // ── Data Fetching (silent = tiada spinner, untuk auto-refresh senyap) ──
+  async function fetchDashboard(silent = false) {
+    try {
+      if (!silent) setLoading(true);
 
-        const [statsRes, logsRes, trendsRes, perfRes, leaveRes] = await Promise.all([
-          axios.get(`${API_BASE_URL}/api/dashboard/stats`),
-          axios.get(`${API_BASE_URL}/api/dashboard/audit-logs`),
-          axios.get(`${API_BASE_URL}/api/dashboard/order-trends`),
-          axios.get(`${API_BASE_URL}/api/dashboard/staff-performance`),
-          axios.get(`${API_BASE_URL}/api/dashboard/leave-stats`),
-        ]);
+      const [statsRes, logsRes, trendsRes, perfRes, leaveRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/dashboard/stats`),
+        axios.get(`${API_BASE_URL}/api/dashboard/audit-logs`),
+        axios.get(`${API_BASE_URL}/api/dashboard/order-trends`),
+        axios.get(`${API_BASE_URL}/api/dashboard/staff-performance`),
+        axios.get(`${API_BASE_URL}/api/dashboard/leave-stats`),
+      ]);
 
-        setStats(statsRes.data);
-        setAuditLogs(logsRes.data);
-        setOrderTrends(trendsRes.data);
-        setStaffPerf(perfRes.data);
-        setLeaveStats(leaveRes.data);
-      } catch (err) {
-        console.error('Dashboard fetch error:', err);
-        setError('Gagal memuatkan data dashboard. Pastikan backend berjalan dan cuba semula.');
-      } finally {
+      setStats(statsRes.data);
+      setAuditLogs(logsRes.data);
+      setOrderTrends(trendsRes.data);
+      setStaffPerf(perfRes.data);
+      setLeaveStats(leaveRes.data);
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+      if (!silent) setError('Gagal memuatkan data dashboard. Pastikan backend berjalan dan cuba semula.');
+    } finally {
+      if (!silent) {
         setLoading(false);
         setChartsLoading(false);
       }
     }
+  }
 
+  useEffect(() => {
     fetchDashboard();
   }, []);
+
+  // ── Auto-refresh: KPI, carta & log audit kekal terkini tanpa reload ──
+  useAutoRefresh(() => fetchDashboard(true));
 
   const LOGS_PAGE_SIZE = 5;
   const paginatedLogs = auditLogs.slice((logsPage - 1) * LOGS_PAGE_SIZE, logsPage * LOGS_PAGE_SIZE);

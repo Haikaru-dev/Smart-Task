@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const SparkleIcon = () => (
@@ -150,19 +151,22 @@ export default function JanaanJadual() {
     setTimeout(() => setToast(null), 5000);
   }, []);
 
-  // ── Ambil papan agihan dari DB ──
-  const fetchBoard = useCallback(async () => {
+  // ── Ambil papan agihan dari DB (silent = tiada spinner, untuk auto-refresh senyap) ──
+  const fetchBoard = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
       const res = await axios.get(`${API_BASE_URL}/api/tasks/board`);
       setBoard(Array.isArray(res.data) ? res.data : []);
     } catch {
-      setError('Gagal memuat papan agihan. Semak sambungan backend.');
+      if (!silent) setError('Gagal memuat papan agihan. Semak sambungan backend.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
+
+  // ── Auto-refresh: papan agihan kekal terkini tanpa reload ──
+  useAutoRefresh(() => fetchBoard(true));
 
   useEffect(() => {
     async function fetchInitialData() {

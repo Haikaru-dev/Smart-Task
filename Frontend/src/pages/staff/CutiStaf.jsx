@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 import Pagination from '../../components/Pagination';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 
 // ── Ikon SVG ──────────────────────────────────────────────────────
 const CalendarIcon = () => (
@@ -93,23 +94,26 @@ export default function CutiStaf() {
   const [toast, setToast]           = useState(null); // { type, text }
   const [focusField, setFocusField] = useState('');
 
-  // ── Ambil sejarah cuti ──
-  const fetchLeaves = useCallback(async () => {
+  // ── Ambil sejarah cuti (silent = tiada spinner, untuk auto-refresh senyap) ──
+  const fetchLeaves = useCallback(async (silent = false) => {
     if (!staffId) { setLoadLeaves(false); return; }
     try {
-      setLoadLeaves(true);
-      setLeaveError(null);
+      if (!silent) setLoadLeaves(true);
+      if (!silent) setLeaveError(null);
       const res = await axios.get(`${API_BASE_URL}/api/staff/leaves/${staffId}`);
       setLeaves(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ralat fetchLeaves:', err);
-      setLeaveError('Gagal memuatkan sejarah. Semak sambungan backend.');
+      if (!silent) setLeaveError('Gagal memuatkan sejarah. Semak sambungan backend.');
     } finally {
-      setLoadLeaves(false);
+      if (!silent) setLoadLeaves(false);
     }
   }, [staffId]);
 
   useEffect(() => { fetchLeaves(); }, [fetchLeaves]);
+
+  // ── Auto-refresh: kemas kini status tanpa perlu refresh manual ──
+  useAutoRefresh(() => fetchLeaves(true));
 
   // ── Kemas kini form ──
   const handleChange = (field, value) => {
