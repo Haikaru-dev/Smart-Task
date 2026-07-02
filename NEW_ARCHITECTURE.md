@@ -324,7 +324,7 @@ tepat seperti kamus data). Ini keputusan skop untuk Kalll — bukan bug teknikal
 
 ---
 
-## 6. API Endpoints (Disahkan — 34 route, semua dalam `Backend/server.js`)
+## 6. API Endpoints (Disahkan — 35 route, semua dalam `Backend/server.js`)
 
 Semua endpoint berprefiks `/api/`. Port lalai `5000`. **Semua route bawah ini disahkan
 mempunyai `verifyToken`** (tiada lagi route yang "terlepas" middleware ini — isu ini
@@ -338,8 +338,9 @@ telah diperbetulkan sejak nota audit terdahulu).
 ### Tempahan (Orders)
 | Kaedah | Endpoint | Guard | F / UC |
 |---|---|---|---|
-| POST | `/api/orders` | Manager | F2.1, F2.2, UC-03 |
+| POST | `/api/orders` | Manager | F2.1, F2.2, UC-03 — kini turut jana **4 tugasan lalai** (Design/Printing/Packing/Delivery) dalam satu transaksi (§12 #12 selesai, 2026-07-03) |
 | GET | `/api/orders` | Manager | F2.4 |
+| GET | `/api/orders/:id/tasks` | Manager | Senarai tugasan satu tempahan, susunan `FIELD(Design→Delivery)` — untuk modal frontend (ditambah 2026-07-03, §12 #12) |
 | PATCH | `/api/orders/:id/status` | Manager | F2.3, UC-11 — validasi terhadap 4 ENUM status, ditambah 2026-07-02 (§12 #1 selesai) |
 
 > Tiada `GET /api/orders/:id` — paparan detail guna data yang
@@ -381,7 +382,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | POST | `/api/tasks/save-assignments` | Manager | Sahkan cadangan AI → simpan dalam transaksi |
 | PUT | `/api/tasks/:id` | Manager | F3.4 — semakan konflik cuti: 409 jika cuti penuh, `warning` jika separa (§12 #6) |
 | POST | `/api/tasks/confirm` | Manager | Sahkan draf → `approval_status = 'Confirmed'` |
-| DELETE | `/api/tasks/:id` | Manager | Padam draf sahaja (reset ke kolam belum diagih, bukan hard-delete) |
+| DELETE | `/api/tasks/:id` | Manager | Dua kes (2026-07-03, §12 #12): draf AI → reset ke kolam (tingkah laku lama); tugasan `Confirmed` **belum diagih** → hard-delete; sudah diagih → 404 |
 | PATCH | `/api/tasks/:id/status` | Staff atau Manager | F4.3, F4.4, UC-08 — semak pemilikan (`staffId`), terima `status` + `file` (multer) + `notes` → `staff_notes` (§12 #2 selesai, 2026-07-02) |
 | GET | `/api/staff/tasks/:staff_id` | Staff atau Manager | F4.1, F4.2, UC-07 |
 
@@ -410,7 +411,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | F2.1–F2.2 | Daftar Tempahan (butiran, jenis penghantaran) | ✅ Patuh | `POST /api/orders` |
 | F2.3 | Kemas kini status percetakan (tender luar) | ✅ Patuh | `PATCH /api/orders/:id/status` + dropdown modal `Tempahan.jsx` (2026-07-02) |
 | F2.4 | Papar senarai penuh tempahan + status | ✅ Patuh | `GET /api/orders` |
-| F3.1–F3.2 | Jana tugasan (Reka Bentuk/Bungkus/Hantar), tetapkan staf & masa | ✅ Patuh | Round-Robin + Gemini AI, dua-dua ada |
+| F3.1–F3.2 | Jana tugasan (Reka Bentuk/Bungkus/Hantar), tetapkan staf & masa | ✅ Patuh | Penjanaan tugasan: **automatik semasa cipta Tempahan** (4 jenis lalai, §12 #12 selesai 2026-07-03 — sebelum ini hanya data seed yang beri ilusi berfungsi); agihan staf & masa: Round-Robin + Gemini AI, dua-dua ada |
 | F3.3 | Semak status cuti staf sebelum tetapkan tugasan | ✅ Patuh | `getLeaveStatusForTask()` skop modul, dikongsi ketiga-tiga laluan (§12 #6 selesai, 2026-07-02) |
 | F3.4 | Sunting/padam tugasan berjadual | ✅ Patuh | `PUT`/`DELETE /api/tasks/:id` |
 | F4.1–F4.2 | Papar tugasan khusus staf log masuk + butiran | ✅ Patuh | `GET /api/staff/tasks/:staff_id`, semakan pemilikan |
@@ -480,7 +481,11 @@ secara statik — perlu ujian beban sebenar jika hendak dilaporkan dalam FYP.
   `Padam Staf` (`DELETE /api/staff/:id`, ada pengesahan + halang padam sendiri).
   Carta alir "Urus Staf" kini padan sepenuhnya.
 - **Tempahan:** `Paparan Senarai Tempahan` (`GET /api/orders`) → `Baru` →
-  `Isi Borang` → `Simpan Tempahan` (`POST /api/orders`).
+  `Isi Borang` → `Simpan Tempahan` (`POST /api/orders` — kini turut **jana
+  4 tugasan lalai** Design/Printing/Packing/Delivery dalam transaksi yang sama;
+  Admin padam yang tak perlu melalui `DELETE /api/tasks/:id`, dan senarai
+  tugasan setiap tempahan boleh dipapar melalui `GET /api/orders/:id/tasks` —
+  §12 #12 selesai, 2026-07-03).
   Cabang **"Status → Lihat Detail → Ubah Status Cetakan → Simpan Status Cetakan"**
   kini disokong `PATCH /api/orders/:id/status` melalui dropdown pada modal
   "Perincian Tempahan" (§12 #1 selesai, 2026-07-02).
@@ -593,6 +598,31 @@ amaran muncul bila tiada, hilang bila ditetapkan.
 ⚠️ **Tindakan pengguna masih perlu:** `.env` tempatan disahkan (2026-07-02)
 **belum** tetapkan `JWT_SECRET` — jana nilai rawak (arahan dalam
 `Backend/.env.example`) sebelum sebarang demo/produksi.
+
+**#12 — ✅ SELESAI (2026-07-03) — Tiada penjanaan tugasan automatik untuk Tempahan baharu (F3.1)**
+Punca: `POST /api/orders` hanya INSERT ke `orders` — tiada `INSERT INTO tasks`
+di mana-mana dalam `server.js`, jadi tempahan yang dicipta melalui UI sebenar
+tidak pernah dapat tugasan; 11 baris seed `tasks` dalam `schema.sql` memberi
+ilusi ciri ini berfungsi. Pembetulan (keputusan disahkan pengguna):
+(a) `POST /api/orders` dibalut **transaksi** — INSERT order + 4 tugasan lalai
+(`Design`/`Printing`/`Packing`/`Delivery`, `status='Pending'`,
+`approval_status='Confirmed'` ikut lalai jadual), rollback jika mana-mana gagal;
+(b) route baharu `GET /api/orders/:id/tasks` (Manager) untuk paparan modal,
+susunan `FIELD('Design','Printing','Packing','Delivery')`;
+(c) `DELETE /api/tasks/:id` diperluas kepada dua kes — draf AI (`Draft`) kekal
+reset-ke-kolam seperti lama; tugasan `Confirmed` **belum diagih** kini
+hard-delete; tugasan sudah diagih staf → 404 dengan mesej "nyahagih dahulu".
+**Bukti (diuji sebenar, instance ujian port 5099 + MySQL langsung):**
+POST cipta order → 4 baris `tasks` wujud serta-merta dengan `order_id` sepadan;
+GET pulangkan 4 tugasan susunan Design→Delivery; DELETE auto-gen belum diagih
+→ 200 dan baris hilang; DELETE draf AI → 200 dengan reset (assigned NULL,
+`approval_status='Confirmed'`, tingkah laku lama tak berubah); DELETE tugasan
+sudah diagih → 404 dan baris kekal. Kolam agihan `generate-schedule` (baris
+~759) dan `auto-assign` (baris ~894) kedua-duanya pilih
+`assigned_staff_id IS NULL` — tugasan auto-jana kini layak diagih.
+Data ujian (order 20 + tugasannya) dibersihkan selepas ujian.
+*Skop tidak disentuh:* `POST /api/tasks/save-assignments`, `POST /api/tasks/confirm`,
+`PUT /api/tasks/:id` (logik draf-sahkan AI kekal).
 
 **#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
 `INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`

@@ -232,45 +232,53 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// Endpoint untuk menambah tempahan baharu
+// Endpoint untuk menambah tempahan baharu (berserta 4 tugasan lalai, dalam satu transaksi)
 app.post('/api/orders', verifyToken, requireRole('Manager'), async (req, res) => {
     console.log("Data diterima:", req.body);
-
-    // 1. Tangkap semua data dari Frontend
     const { namaKlien, jenisItem, kuantiti, harga, tarikhSiap, jenisHantar, lokasiHantar, nota } = req.body;
-
-    // 2. Jana nombor tempahan
     const order_number = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // 3. Masukkan 'delivery_location' ke dalam SQL (pastikan kolum ini wujud di MySQL anda)
-    const sql = `INSERT INTO orders
-                 (order_number, client_name, item_type, quantity, price, due_date, delivery_type, delivery_location, specifications, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`;
-
-    // 4. Susun 'values' mengikut urutan tanda soal (?) di atas
-    const values = [
-        order_number,
-        namaKlien,
-        jenisItem,
-        kuantiti,
-        harga,
-        tarikhSiap,
-        jenisHantar,
-        lokasiHantar,  // <- Kita tambah lokasi di sini
-        nota
-    ];
-
+    const connection = await db.getConnection();
     try {
-        // 5. Laksanakan ke pangkalan data menggunakan async/await
-        const [result] = await db.query(sql, values);
+        await connection.beginTransaction();
 
-        console.log("Data berjaya disimpan dengan ID:", result.insertId);
+        const orderSql = `INSERT INTO orders
+                     (order_number, client_name, item_type, quantity, price, due_date, delivery_type, delivery_location, specifications, status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`;
+        const orderValues = [order_number, namaKlien, jenisItem, kuantiti, harga, tarikhSiap, jenisHantar, lokasiHantar, nota];
+        const [orderResult] = await connection.query(orderSql, orderValues);
+        const orderId = orderResult.insertId;
 
-        // PASTIKAN BARIS INI ADA DI DALAM KOD ANDA! INI JAWAPAN KEPADA REACT
-        return res.status(201).json({ message: "Tempahan berjaya disimpan!", orderId: result.insertId });
+        // Jana 4 jenis tugasan lalai — Admin boleh padam yang tak perlu selepas ini
+        const TASK_TYPES = ['Design', 'Printing', 'Packing', 'Delivery'];
+        const taskValues = TASK_TYPES.map(type => [orderId, type]);
+        await connection.query(`INSERT INTO tasks (order_id, task_type) VALUES ?`, [taskValues]);
+
+        await connection.commit();
+        console.log("Tempahan + 4 tugasan lalai berjaya disimpan dengan ID:", orderId);
+        return res.status(201).json({ message: "Tempahan berjaya disimpan!", orderId });
+
     } catch (error) {
+        await connection.rollback();
         console.error("Ralat MySQL:", error);
         return res.status(500).json({ error: "Gagal menyimpan data ke pangkalan data." });
+    } finally {
+        connection.release();
+    }
+});
+
+// Senaraikan tugasan bagi satu tempahan (untuk paparan di modal frontend)
+app.get('/api/orders/:id/tasks', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const [results] = await db.query(
+            `SELECT id, task_type, status, approval_status, assigned_staff_id
+             FROM tasks WHERE order_id = ? ORDER BY FIELD(task_type, 'Design','Printing','Packing','Delivery')`,
+            [req.params.id]
+        );
+        res.status(200).json(results);
+    } catch (err) {
+        console.error("Ralat GET /api/orders/:id/tasks:", err);
+        res.status(500).json({ error: "Gagal mengambil senarai tugasan." });
     }
 });
 
@@ -1541,22 +1549,36 @@ app.post('/api/tasks/confirm', verifyToken, requireRole('Manager'), async (req, 
     }
 });
 
-// Padam draf: reset tugasan ke pool belum diagih (tiada hard delete)
+// Padam tugasan: kendali dua kes — draf AI (reset ke pool) atau tugasan lalai belum diagih (padam terus)
 app.delete('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const taskId = req.params.id;
-        const [result] = await db.query(
+
+        // Kes 1: draf AI belum disahkan — reset ke kolam belum diagih (tingkah laku sedia ada, tak berubah)
+        const [draftResult] = await db.query(
             `UPDATE tasks
              SET assigned_staff_id = NULL, start_time = NULL, end_time = NULL, approval_status = 'Confirmed'
              WHERE id = ? AND approval_status = 'Draft'`,
             [taskId]
         );
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Tugasan draf tidak dijumpai atau sudah disahkan." });
+        if (draftResult.affectedRows > 0) {
+            return res.status(200).json({ message: "Draf tugasan berjaya dipadam dan dikembalikan ke senarai belum diagih." });
         }
-        res.status(200).json({ message: "Draf tugasan berjaya dipadam dan dikembalikan ke senarai belum diagih." });
+
+        // Kes 2 (BAHARU): tugasan lalai (auto-generated) belum diagih staf — padam terus
+        const [hardDeleteResult] = await db.query(
+            `DELETE FROM tasks WHERE id = ? AND approval_status = 'Confirmed' AND assigned_staff_id IS NULL`,
+            [taskId]
+        );
+        if (hardDeleteResult.affectedRows > 0) {
+            return res.status(200).json({ message: "Tugasan berjaya dipadam." });
+        }
+
+        return res.status(404).json({
+            error: "Tugasan tidak dijumpai, atau sudah diagihkan kepada staf (nyahagih dahulu sebelum padam)."
+        });
     } catch (err) {
         console.error("Ralat DELETE /api/tasks/:id:", err);
-        res.status(500).json({ error: "Gagal memadam draf tugasan." });
+        res.status(500).json({ error: "Gagal memadam tugasan." });
     }
 });

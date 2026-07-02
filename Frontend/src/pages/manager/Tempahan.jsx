@@ -32,6 +32,9 @@ export default function Tempahan() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [orderTasks, setOrderTasks] = useState([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState(null);
 
   // ── Ambil data tempahan (silent = tiada spinner, untuk auto-refresh senyap) ──
   async function fetchOrders(silent = false) {
@@ -57,14 +60,36 @@ export default function Tempahan() {
   useAutoRefresh(() => fetchOrders(true));
 
   // Fungsi mengawal Modal
-  function handleOpenModal(order) {
+  async function handleOpenModal(order) {
     setSelectedOrder(order);
     setIsModalOpen(true);
+    setLoadingTasks(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/orders/${order.id}/tasks`);
+      setOrderTasks(res.data);
+    } catch {
+      setOrderTasks([]);
+    } finally {
+      setLoadingTasks(false);
+    }
   }
 
   function handleCloseModal() {
     setIsModalOpen(false);
     setSelectedOrder(null);
+  }
+
+  // ── Padam tugasan yang belum diagih terus dari modal ──
+  async function handleDeleteTask(taskId) {
+    setDeletingTaskId(taskId);
+    try {
+      await axios.delete(`${API_BASE_URL}/api/tasks/${taskId}`);
+      setOrderTasks(prev => prev.filter(t => t.id !== taskId));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Gagal memadam tugasan.');
+    } finally {
+      setDeletingTaskId(null);
+    }
   }
 
   // ── Kemaskini status tempahan terus dari modal (UC-11) ──
@@ -293,6 +318,36 @@ export default function Tempahan() {
                   <div style={modalStyles.notesBox}>
                     {selectedOrder.specifications || 'Tiada nota tambahan disertakan.'}
                   </div>
+                </div>
+
+                <div style={{ ...modalStyles.infoItem, gridColumn: '1 / -1' }}>
+                  <span style={modalStyles.infoLabel}>Tugasan Dijana</span>
+                  {loadingTasks ? (
+                    <p style={{ fontSize: 13, color: '#64748B' }}>Memuatkan...</p>
+                  ) : orderTasks.length === 0 ? (
+                    <p style={{ fontSize: 13, color: '#64748B' }}>Tiada tugasan.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
+                      {orderTasks.map(t => (
+                        <span key={t.id} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          padding: '4px 10px', borderRadius: '6px', fontSize: '13px',
+                          background: t.assigned_staff_id ? '#F0FDF4' : '#F8FAFC',
+                          border: '1px solid #E2E8F0'
+                        }}>
+                          {t.task_type}
+                          {!t.assigned_staff_id && (
+                            <button
+                              onClick={() => handleDeleteTask(t.id)}
+                              disabled={deletingTaskId === t.id}
+                              title="Padam tugasan ini"
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '14px', lineHeight: 1 }}
+                            >×</button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
