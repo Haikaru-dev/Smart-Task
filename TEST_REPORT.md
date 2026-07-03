@@ -36,7 +36,7 @@ Peraturan sesi: pepijat yang ditemui **TIDAK dibaiki** — direkodkan sahaja
 
 | Lapisan | Keputusan |
 |---|---|
-| Ujian automatik | **138 / 139 lulus** (1 gagal — IDOR sebenar, lihat Isu Baharu #A) |
+| Ujian automatik | **138 / 139 lulus** (1 gagal — IDOR sebenar, lihat Isu Baharu #A) — *kemas kini ujian semula 2026-07-03: selepas pembetulan IDOR + 9 kes baharu, **148/148 lulus*** |
 | Semakan manual | **8 PASS penuh, 1 PASS separa (UC-08), 1 disekat persekitaran (UC-04 AI)** — *kemas kini ujian semula 2026-07-03: UC-08 kini PASS penuh (9 PASS penuh), lihat seksyen Ujian Semula* |
 
 ---
@@ -61,7 +61,9 @@ Time:        5.083 s
 **Kegagalan tunggal (dikekalkan sengaja, bukan dibaiki):**
 `GET /api/staff/tasks/:staff_id` — token Staff `staffId=4` meminta
 `/api/staff/tasks/9` dijangka **403**, menerima **200** dengan data staf lain.
-Lihat Isu Baharu #A.
+Lihat Isu Baharu #A. *(Kemas kini 2026-07-03: kes ini kini LULUS selepas
+pembetulan — lihat "Ujian Semula — Isu #A"; jadual di atas ialah rekod
+larian asal.)*
 
 ---
 
@@ -84,7 +86,12 @@ Lihat Isu Baharu #A.
 
 ## Isu Baharu Ditemui
 
-### 🔴 #A — IDOR: `GET /api/staff/tasks/:staff_id` tiada semakan pemilikan (F4.1, NFR 3.4.1.b)
+### 🔴 #A — ✅ SELESAI (ujian semula 2026-07-03) — IDOR: `GET /api/staff/tasks/:staff_id` tiada semakan pemilikan (F4.1, NFR 3.4.1.b)
+
+> **Status terkini:** kesemua 4 route (termasuk 3 route corak-sama yang
+> dikenal pasti secara statik) telah dibaiki dan disahkan — lihat seksyen
+> "Ujian Semula (2026-07-03) — Isu #A" di bawah. Rekod asal dikekalkan
+> sebagai sejarah:
 
 **Bukti (ujian automatik, `tasks.test.js`):** token Staff dengan `staffId=4`
 memanggil `GET /api/staff/tasks/9` → dijangka 403, **sebenar 200 dengan data
@@ -141,6 +148,41 @@ selepas keputusan migrasi #B.
 
 ---
 
+## Ujian Semula (2026-07-03) — Isu #A
+
+**Konteks:** pembetulan IDOR dilaksanakan pada 4 route data-staf, menggunakan
+corak sama seperti `PATCH /api/tasks/:id/status` dan
+`POST /api/staff/:id/profile-picture` (rujukan, tidak disentuh): semakan
+`req.user.role === 'Staff' && String(req.user.staffId) !== String(<param>)`
+→ 403, diletakkan sebaik selepas `req.params` dibaca, sebelum sebarang query.
+Manager kekal tanpa sekatan.
+
+**Route dibaiki:** `GET /api/staff/tasks/:staff_id`,
+`GET /api/staff/leaves/:staff_id`, `PUT /api/staff/update-profile/:id`
+(WRITE — keutamaan tertinggi), `GET /api/staff/:id`.
+
+**Liputan ujian baharu** (9 kes ditambah merentas `staff.test.js`,
+`tasks.test.js`, `leaves.test.js`): bagi setiap route — staf minta data staf
+LAIN → 403 (dan `db.query` disahkan TIDAK dipanggil), staf minta data SENDIRI
+→ 200 tak berubah, Manager minta data mana-mana staf → 200 tak berubah.
+Kes IDOR asal dalam `tasks.test.js` (yang sengaja dikekalkan GAGAL dalam
+laporan asal) kini LULUS tanpa diubah.
+
+**Keputusan sebenar `npm test`:**
+
+```
+Test Suites: 6 passed, 6 total
+Tests:       148 passed, 148 total
+```
+
+**Keputusan: ✅ PASS** — 148/148 (139 kes asal + 9 kes baharu; sebelum
+pembetulan: 138/139). Isu #A ditutup. Nota: `GET /api/staff/:id` turut dipakai
+`ProfilStaf.jsx` (staf memuatkan profil sendiri — `staffId` dari
+localStorage sepadan dengan token, tidak terjejas) dan `DetailStaf.jsx`
+(Manager — tiada sekatan).
+
+---
+
 ## Ujian Semula (2026-07-03) — Isu #B
 
 **Konteks:** migrasi `CHANGE COLUMN` dijalankan pengguna selepas laporan asal
@@ -182,9 +224,10 @@ Dakwaan **"17/17 F-requirements, 11/11 UC patuh"** dalam NEW_ARCHITECTURE.md
   automatik BERFUNGSI pada larian sebenar), F3.3 (409/warning pada larian
   sebenar), F5, F6.1/F6.2, UC-01/02/03/05/11, RBAC 26 route Manager (95 kes lulus).
 - **Perlu diturunkan taraf:**
-  - **F4.1/UC-07** — "papar tugasan khusus staf log masuk" berfungsi, tetapi
-    tiada penguatkuasaan pemilikan (Isu #A) → sepatutnya "✅ dengan kaveat
-    keselamatan" atau "⚠️ Separa".
+  - ~~**F4.1/UC-07** — "papar tugasan khusus staf log masuk" berfungsi, tetapi
+    tiada penguatkuasaan pemilikan (Isu #A)~~ — **dinaikkan semula ke ✅ Patuh**
+    selepas pembetulan IDOR pada 4 route dan 148/148 ujian lulus (lihat
+    seksyen "Ujian Semula (2026-07-03) — Isu #A").
   - ~~**F4.4/UC-08** — muat naik bukti kerja GAGAL pada persekitaran sebenar
     semasa (Isu #B)~~ — **dinaikkan semula ke ✅ Patuh** selepas migrasi
     `CHANGE COLUMN` dan ujian semula laluan penuh LULUS (lihat seksyen
@@ -192,6 +235,8 @@ Dakwaan **"17/17 F-requirements, 11/11 UC patuh"** dalam NEW_ARCHITECTURE.md
   - **F3.1–F3.2 (laluan AI)** — tidak dapat disahkan dalam persekitaran ini
     (Isu #C); hanya Round-Robin terbukti hujung-ke-hujung.
 - ~~Pembetulan untuk Isu #A dan #B hendaklah dibuat sebagai prompt berasingan~~
-  **Kemas kini:** Isu #B SELESAI (migrasi + ujian semula LULUS, 2026-07-03).
-  Yang masih terbuka: **Isu #A (IDOR)** — memerlukan prompt pembetulan
-  berasingan — dan Isu #C/#D (persekitaran/data, tindakan pengguna).
+  **Kemas kini:** Isu #B SELESAI (migrasi + ujian semula LULUS, 2026-07-03)
+  dan Isu #A SELESAI (pembetulan IDOR 4 route + 148/148 ujian LULUS,
+  2026-07-03). Yang masih terbuka: hanya Isu #C/#D (persekitaran/data —
+  tindakan pengguna: `GEMINI_API_KEY` + `JWT_SECRET` dalam `.env`,
+  pembersihan baris staf ber-`status NULL`).

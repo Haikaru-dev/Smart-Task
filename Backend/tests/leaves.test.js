@@ -53,6 +53,25 @@ describe('GET /api/staff/leaves/:staff_id — sejarah cuti staf (F5.2)', () => {
         expect(Array.isArray(res.body)).toBe(true);
         expect(db.query.mock.calls[0][1]).toEqual(['4']);
     });
+
+    it('tolak (403) — staf cuba lihat sejarah cuti staf LAIN (isu IDOR #A)', async () => {
+        const res = await request(app)
+            .get('/api/staff/leaves/9')
+            .set('Authorization', `Bearer ${tokenStaff()}`);  // staffId = 4
+
+        expect(res.status).toBe(403);
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it('berjaya (200) — Manager lihat sejarah cuti MANA-MANA staf', async () => {
+        db.query.mockResolvedValueOnce([[{ id: 1, staff_id: 9, status: 'Pending' }]]);
+
+        const res = await request(app)
+            .get('/api/staff/leaves/9')
+            .set('Authorization', `Bearer ${tokenManager()}`);
+
+        expect(res.status).toBe(200);
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

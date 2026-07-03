@@ -351,11 +351,11 @@ telah diperbetulkan sejak nota audit terdahulu).
 |---|---|---|---|
 | GET | `/api/staff` | Manager | Jadual 3.1 (Admin lihat senarai staf) |
 | POST | `/api/staff` | Manager | UC-02 |
-| GET | `/api/staff/:id` | Staff **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga |
+| GET | `/api/staff/:id` | Staff (sendiri sahaja) **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga — semakan pemilikan ditambah 2026-07-03 (§12 #13) |
 | PUT | `/api/staff/:id` | Manager | UC-02 — kemaskini penuh (nama + jawatan) oleh Admin, UI edit-in-place pada `DetailStaf.jsx` (ditambah 2026-07-02) |
 | DELETE | `/api/staff/:id` | Manager | UC-02 (alt: "Padam Staf") — ada guard halang padam akaun sendiri |
 | POST | `/api/staff/:id/profile-picture` | Staff (sendiri) atau Manager | F6.1, UC-02, UC-10 — multer berasingan (JPG/PNG, had 2MB, folder `/uploads/staff/`), fail dipadam jika 403/404 (§12 #5) |
-| PUT | `/api/staff/update-profile/:id` | Staff atau Manager | F6.1/F6.2, UC-10 (had: email + phone sahaja) |
+| PUT | `/api/staff/update-profile/:id` | Staff (sendiri sahaja) atau Manager | F6.1/F6.2, UC-10 (had: email + phone sahaja) — semakan pemilikan ditambah 2026-07-03 (§12 #13) |
 | PUT | `/api/staff/change-password/:userId` | Staff atau Manager | F6.2, UC-10 |
 
 > ✅ *(Selesai 2026-07-02)* Kekaburan "Kemaskini" dalam UC-02 telah diputuskan:
@@ -370,7 +370,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | POST | `/api/leaves` | Manager | *(nota: laluan admin cipta rekod cuti — fungsi ini sengaja dibuang daripada UI, lihat §11)* |
 | GET | `/api/manager/leaves` | Manager | F5.3, UC-05 |
 | PUT | `/api/manager/leaves/:id` | Manager | F5.4, UC-05 |
-| GET | `/api/staff/leaves/:staff_id` | Staff atau Manager | F5.2 |
+| GET | `/api/staff/leaves/:staff_id` | Staff (sendiri sahaja) atau Manager | F5.2 — semakan pemilikan ditambah 2026-07-03 (§12 #13) |
 | POST | `/api/staff/leaves` | Staff atau Manager | F5.1, UC-09 |
 
 ### Tugasan & Janaan Jadual
@@ -384,7 +384,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 | POST | `/api/tasks/confirm` | Manager | Sahkan draf → `approval_status = 'Confirmed'` |
 | DELETE | `/api/tasks/:id` | Manager | Dua kes (2026-07-03, §12 #12): draf AI → reset ke kolam (tingkah laku lama); tugasan `Confirmed` **belum diagih** → hard-delete; sudah diagih → 404 |
 | PATCH | `/api/tasks/:id/status` | Staff atau Manager | F4.3, F4.4, UC-08 — semak pemilikan (`staffId`), terima `status` + `file` (multer) + `notes` → `staff_notes` (§12 #2 selesai, 2026-07-02) |
-| GET | `/api/staff/tasks/:staff_id` | Staff atau Manager | F4.1, F4.2, UC-07 |
+| GET | `/api/staff/tasks/:staff_id` | Staff (sendiri sahaja) atau Manager | F4.1, F4.2, UC-07 — semakan pemilikan ditambah 2026-07-03 (§12 #13) |
 
 ### Dashboard
 | Kaedah | Endpoint | Guard | F / UC |
@@ -454,11 +454,15 @@ terdahulu "12/17 + 3 separa" tersilap kira; jadual sentiasa jadi rujukan.)*
 **(a) Kebolehgunaan** — Antara muka responsif, semua teks Bahasa Melayu, portal
 mudah alih-mesra untuk Staf. Tiada isu ketara dikesan semasa audit kod.
 
-**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 34/34 route
-bergerbang). Kata laluan di-hash bcrypt (disahkan `seed.js` + route tukar kata
-laluan). **Tetapi**: JWT secret ada fallback hardcode terdedah dalam repo awam
-(§3.1) — ini secara langsung bertentangan dengan semangat 3.4.1(b) walaupun bukan
-RBAC per se. **Keutamaan Tinggi** untuk dibetulkan (§12 #3).
+**(b) Keselamatan** — RBAC dikuatkuasakan penuh pada backend (§4, §6: 35/35 route
+bergerbang; disahkan oleh 95 kes ujian `rbac.test.js`). Kata laluan di-hash bcrypt
+(disahkan `seed.js` + route tukar kata laluan). **Semakan pemilikan (anti-IDOR)**
+kini dikuatkuasakan pada kesemua 4 route data-staf yang sebelum ini terdedah
+(§12 #13 selesai 2026-07-03; disahkan ujian — 148/148 lulus). **Tetapi**: JWT
+secret ada fallback hardcode terdedah dalam repo awam (§3.1) — ini secara
+langsung bertentangan dengan semangat 3.4.1(b) walaupun bukan RBAC per se.
+**Keutamaan Tinggi** untuk dibetulkan (§12 #3 — `JWT_SECRET` dalam `.env`
+tempatan masih belum ditetapkan).
 
 **(c) Kecekapan** — Penjanaan jadual (Round-Robin & AI-simpan) dibalut transaksi
 MySQL (`beginTransaction`/`commit`/`rollback`) — disahkan dalam kod, bukan sekadar
@@ -623,6 +627,22 @@ sudah diagih → 404 dan baris kekal. Kolam agihan `generate-schedule` (baris
 Data ujian (order 20 + tugasannya) dibersihkan selepas ujian.
 *Skop tidak disentuh:* `POST /api/tasks/save-assignments`, `POST /api/tasks/confirm`,
 `PUT /api/tasks/:id` (logik draf-sahkan AI kekal).
+
+**#13 — ✅ SELESAI (2026-07-03) — IDOR: 4 route data-staf tiada semakan pemilikan (NFR 3.4.1.b, TEST_REPORT.md Isu #A)**
+Ditemui oleh sut ujian (kes gagal disengajakan dalam `tasks.test.js`):
+token Staff boleh membaca/menulis data staf lain kerana handler terus guna
+`req.params` tanpa banding dengan `staffId` dalam token. Empat route dibaiki
+dengan corak sama seperti `PATCH /api/tasks/:id/status` dan
+`POST /api/staff/:id/profile-picture` (yang sedia betul):
+- `GET /api/staff/tasks/:staff_id` (tugasan staf lain — baca)
+- `GET /api/staff/leaves/:staff_id` (sejarah cuti staf lain — baca)
+- `PUT /api/staff/update-profile/:id` (emel/telefon staf lain — **TULIS**, paling teruk)
+- `GET /api/staff/:id` (profil staf lain — baca)
+Semakan diletakkan sebaik selepas `req.params` dibaca, sebelum sebarang query;
+Manager kekal tanpa sekatan. **Bukti:** `npm test` = **148/148 lulus**
+(139 asal termasuk kes IDOR yang dahulu gagal + 9 kes baharu: 403 staf-lain /
+200 sendiri / 200 Manager untuk setiap route). Rujuk TEST_REPORT.md
+"Ujian Semula — Isu #A".
 
 **#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
 `INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`

@@ -198,6 +198,77 @@ describe('POST /api/staff/:id/profile-picture — gambar profil (isu #5)', () =>
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+describe('GET /api/staff/:id — profil staf, semakan pemilikan (isu IDOR #A)', () => {
+
+    it('tolak (403) — staf cuba lihat profil staf LAIN', async () => {
+        const res = await request(app)
+            .get('/api/staff/9')
+            .set('Authorization', `Bearer ${tokenStaff()}`);  // staffId = 4
+
+        expect(res.status).toBe(403);
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it('berjaya (200) — staf lihat profil SENDIRI', async () => {
+        db.query.mockResolvedValueOnce([[{ id: 4, name: 'Nurul Aina', role: 'Designer' }]]);
+
+        const res = await request(app)
+            .get('/api/staff/4')
+            .set('Authorization', `Bearer ${tokenStaff()}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.id).toBe(4);
+    });
+
+    it('berjaya (200) — Manager lihat profil MANA-MANA staf', async () => {
+        db.query.mockResolvedValueOnce([[{ id: 9, name: 'Staf Lain', role: 'Finishing' }]]);
+
+        const res = await request(app)
+            .get('/api/staff/9')
+            .set('Authorization', `Bearer ${tokenManager()}`);
+
+        expect(res.status).toBe(200);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('PUT /api/staff/update-profile/:id — semakan pemilikan (isu IDOR #A, WRITE)', () => {
+
+    it('tolak (403) — staf cuba ubah emel/telefon staf LAIN', async () => {
+        const res = await request(app)
+            .put('/api/staff/update-profile/9')
+            .set('Authorization', `Bearer ${tokenStaff()}`)   // staffId = 4
+            .send({ email: 'jahat@contoh.com', phone: '0100000000' });
+
+        expect(res.status).toBe(403);
+        expect(db.query).not.toHaveBeenCalled();
+    });
+
+    it('berjaya (200) — staf kemaskini profil SENDIRI', async () => {
+        db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+        const res = await request(app)
+            .put('/api/staff/update-profile/4')
+            .set('Authorization', `Bearer ${tokenStaff()}`)
+            .send({ email: 'saya@contoh.com', phone: '0111111111' });
+
+        expect(res.status).toBe(200);
+        expect(db.query.mock.calls[0][1]).toEqual(['saya@contoh.com', '0111111111', '4']);
+    });
+
+    it('berjaya (200) — Manager kemaskini profil MANA-MANA staf', async () => {
+        db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+        const res = await request(app)
+            .put('/api/staff/update-profile/9')
+            .set('Authorization', `Bearer ${tokenManager()}`)
+            .send({ email: 'admin.ubah@contoh.com', phone: '0122222222' });
+
+        expect(res.status).toBe(200);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 describe('PUT /api/staff/change-password/:userId — tukar kata laluan (F6.2)', () => {
 
     it('berjaya (200) dengan kata laluan semasa yang betul', async () => {

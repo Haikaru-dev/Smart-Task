@@ -201,4 +201,16 @@ describe('GET /api/staff/tasks/:staff_id — tugasan staf sendiri (F4.1, UC-07)'
 
         expect(res.status).toBe(403);
     });
+
+    it('berjaya (200) — Manager lihat tugasan MANA-MANA staf', async () => {
+        db.query.mockResolvedValueOnce([[
+            { id: 8, assigned_staff_id: 9, approval_status: 'Confirmed' }
+        ]]);
+
+        const res = await request(app)
+            .get('/api/staff/tasks/9')
+            .set('Authorization', `Bearer ${tokenManager()}`);
+
+        expect(res.status).toBe(200);
+    });
 });

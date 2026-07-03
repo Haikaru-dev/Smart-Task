@@ -565,6 +565,12 @@ app.post('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => 
 app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staffId = req.params.id;
+
+        // Semakan pemilikan (IDOR): staf hanya boleh lihat profil sendiri
+        if (req.user.role === 'Staff' && String(req.user.staffId) !== String(staffId)) {
+            return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh akses data sendiri.' });
+        }
+
         const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, s.email, s.phone_number, s.profile_picture_url, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`;
         const [results] = await db.query(sql, [staffId]);
         if (results.length === 0) {
@@ -1241,6 +1247,11 @@ app.get('/api/staff/tasks/:staff_id', verifyToken, requireRole('Staff', 'Manager
     try {
         const staff_id = req.params.staff_id;
 
+        // Semakan pemilikan (IDOR): staf hanya boleh lihat tugasan sendiri
+        if (req.user.role === 'Staff' && String(req.user.staffId) !== String(staff_id)) {
+            return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh akses data sendiri.' });
+        }
+
         // Join tasks + orders untuk detail penuh
         const sql = `
             SELECT 
@@ -1268,6 +1279,12 @@ app.get('/api/staff/tasks/:staff_id', verifyToken, requireRole('Staff', 'Manager
 app.get('/api/staff/leaves/:staff_id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staff_id = req.params.staff_id;
+
+        // Semakan pemilikan (IDOR): staf hanya boleh lihat sejarah cuti sendiri
+        if (req.user.role === 'Staff' && String(req.user.staffId) !== String(staff_id)) {
+            return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh akses data sendiri.' });
+        }
+
         const [results] = await db.query(
             `SELECT * FROM leaves WHERE staff_id = ? ORDER BY applied_at DESC`,
             [staff_id]
@@ -1309,6 +1326,12 @@ app.post('/api/staff/leaves', verifyToken, requireRole('Staff', 'Manager'), asyn
 app.put('/api/staff/update-profile/:id', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
     try {
         const staffId = req.params.id;
+
+        // Semakan pemilikan (IDOR): staf hanya boleh kemaskini profil sendiri
+        if (req.user.role === 'Staff' && String(req.user.staffId) !== String(staffId)) {
+            return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh akses data sendiri.' });
+        }
+
         const { email, phone } = req.body;
 
         if (!email && !phone) {
