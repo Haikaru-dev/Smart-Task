@@ -37,7 +37,7 @@ Peraturan sesi: pepijat yang ditemui **TIDAK dibaiki** — direkodkan sahaja
 | Lapisan | Keputusan |
 |---|---|
 | Ujian automatik | **138 / 139 lulus** (1 gagal — IDOR sebenar, lihat Isu Baharu #A) |
-| Semakan manual | **8 PASS penuh, 1 PASS separa (UC-08), 1 disekat persekitaran (UC-04 AI)** |
+| Semakan manual | **8 PASS penuh, 1 PASS separa (UC-08), 1 disekat persekitaran (UC-04 AI)** — *kemas kini ujian semula 2026-07-03: UC-08 kini PASS penuh (9 PASS penuh), lihat seksyen Ujian Semula* |
 
 ---
 
@@ -76,7 +76,7 @@ Lihat Isu Baharu #A.
 | UC-04 (Gemini AI) | `POST /api/manager/auto-assign` dengan 1 tugasan belum diagih | Cadangan agihan AI | **HTTP 500** selepas 3 percubaan — `API_KEY_INVALID` (`GEMINI_API_KEY` tiada dalam `.env`). Kes "tiada tugasan" pulang 200 dengan mesej betul ✓ | **DISEKAT persekitaran** (lihat Isu #C) |
 | UC-05 | Staf mohon cuti → Admin lulus; mohon lagi → Admin tolak dengan sebab → staf semak semula | Status & rejection_reason kelihatan kepada staf | Leave 20: Approved ✓; Leave 21: Rejected + reason 'Ujian manual: kuota cuti' ✓ — kedua-duanya kelihatan melalui `GET /api/staff/leaves/11` | **PASS** |
 | UC-08 (nota) | Staf PATCH status + notes, kemudian GET semula (simulasi refresh) | Nota kekal | status=In Progress, notes='Nota UC-08 tanpa fail' kekal selepas GET semula ✓ | **PASS** |
-| UC-08 (fail bukti) | PATCH status + notes + fail JPG | 200, attachment disimpan | **HTTP 500** — `ER_BAD_FIELD_ERROR: Unknown column 'attachment_path'`; fail SUDAH ditulis ke `uploads/tasks/` tetapi UPDATE gagal sepenuhnya (nota turut hilang) | **FAIL** (lihat Isu #B) |
+| UC-08 (fail bukti) | PATCH status + notes + fail JPG | 200, attachment disimpan | *Larian asal (sebelum migrasi):* **HTTP 500** — `ER_BAD_FIELD_ERROR: Unknown column 'attachment_path'`; fail SUDAH ditulis ke `uploads/tasks/` tetapi UPDATE gagal sepenuhnya (nota turut hilang). *Ujian semula selepas migrasi CHANGE COLUMN:* **HTTP 200**, ketiga-tiga lajur terisi — lihat seksyen "Ujian Semula" | **FAIL → ✅ PASS** (ujian semula 2026-07-03) |
 | UC-11 | PATCH status order → GET semula; cuba status tak sah | Kekal selepas "refresh"; 400 untuk nilai tak sah | Order 21 → In Progress, kekal pada GET baharu ✓; 'StatusRekaan' → 400 ✓ | **PASS** |
 | *(Bonus F3.3)* | PUT /api/tasks/:id tetapkan staf bercuti penuh, kemudian selepas cuti dipadam | 409 → 200 | 409 semasa cuti penuh ✓; 200 tanpa warning selepas cuti dipadam ✓ | **PASS** |
 
@@ -100,7 +100,12 @@ mewajibkan kata laluan semasa akaun sasaran.
 `req.user.role === 'Staff' && String(req.user.staffId) !== String(req.params...)`
 → 403, seperti corak sedia ada dalam PATCH status.
 
-### 🔴 #B — Hanyutan skema: lajur lampiran tugasan `attachment_path` tiada dalam DB tempatan (F4.4, UC-08)
+### 🔴 #B — ✅ SELESAI (ujian semula 2026-07-03) — Hanyutan skema: lajur lampiran tugasan `attachment_path` tiada dalam DB tempatan (F4.4, UC-08)
+
+> **Status terkini:** migrasi `CHANGE COLUMN` telah dijalankan pengguna dan
+> laluan penuh diuji semula dengan jayanya — lihat seksyen
+> "Ujian Semula (2026-07-03) — Isu #B" di bawah. Rekod asal dikekalkan
+> sebagai sejarah:
 
 **Bukti (larian sebenar):** `PATCH /api/tasks/22/status` dengan fail →
 `ER_BAD_FIELD_ERROR: Unknown column 'attachment_path' in 'field list'`
@@ -136,6 +141,38 @@ selepas keputusan migrasi #B.
 
 ---
 
+## Ujian Semula (2026-07-03) — Isu #B
+
+**Konteks:** migrasi `CHANGE COLUMN` dijalankan pengguna selepas laporan asal
+(struktur `tasks` tempatan kini: `attachment_path`, `staff_notes`,
+`approval_status`, `created_at` — disahkan). Ujian semula LALUAN PENUH
+dijalankan pada commit `efcad3a`, instance `PORT=5099`, MySQL sebenar.
+
+**Persediaan:** akaun login sementara `ujian_admin` (Manager) dan `ujian_staf`
+(Staff) dicipta kerana semua kata laluan akaun sedia ada ialah hash bcrypt yang
+tidak diketahui; `ujian_staf` **dipautkan sementara kepada staf SEDIA ADA**
+(id 5, Azim Izaan, `user_id` asalnya NULL) — tiada baris staf baharu dicipta,
+dan pautan dileraikan semula (`user_id=NULL`) sebelum akaun sementara dipadam.
+
+**Langkah & keputusan sebenar:**
+
+| # | Langkah | Keputusan Sebenar |
+|---|---|---|
+| 1 | `POST /api/orders` (Manager) | Order **22** dicipta → 4 tugasan auto-jana (id 23–26) ✓ |
+| 2 | `PUT /api/tasks/23` agih kepada staf 5 | 200 "Tugasan berjaya dikemaskini!" ✓ |
+| 3 | `POST /api/login` sebagai `ujian_staf` | 200, `staffId=5` (Azim Izaan) diselesaikan ✓ |
+| 4 | `PATCH /api/tasks/23/status` + `status='In Progress'` + `notes='Ujian semula selepas migrasi attachment_path'` + fail JPG sebenar | **HTTP 200** — body penuh: `{"success":true,"message":"Status tugasan berjaya dikemaskini.","taskId":23,"status":"In Progress","attachment_path":"/uploads/tasks/task-23-1783034241128.jpg"}` |
+| 5 | `SELECT attachment_path, staff_notes, status FROM tasks WHERE id=23` | `attachment_path=/uploads/tasks/task-23-1783034241128.jpg`, `staff_notes='Ujian semula selepas migrasi attachment_path'`, `status='In Progress'` — **ketiga-tiga terisi, tiada NULL** ✓ |
+| 6 | Fail fizikal di `Backend/uploads/tasks/` | `task-23-1783034241128.jpg` wujud ✓ |
+| 7 | `GET /api/staff/tasks/5` semula (simulasi refresh) | Data sama muncul: status, nota dan attachment konsisten ✓ |
+| 8 | Pembersihan | `DELETE orders id=22` → tugasan 23–26 terpadam melalui **ON DELETE CASCADE (turut disahkan berfungsi)**; fail dipadam; staf 5 dileraikan (`user_id=NULL`, baris kekal); akaun sementara dipadam. Garis dasar disahkan: tasks=0, max order=16, users=6, staff=9 ✓ |
+
+**Keputusan: ✅ PASS** — ralat asal `ER_BAD_FIELD_ERROR: Unknown column
+'attachment_path'` tidak lagi berlaku pada larian sebenar; UC-08 dengan fail
+bukti kini berfungsi hujung-ke-hujung. Isu #B ditutup.
+
+---
+
 ## Kesimpulan
 
 Dakwaan **"17/17 F-requirements, 11/11 UC patuh"** dalam NEW_ARCHITECTURE.md
@@ -148,10 +185,13 @@ Dakwaan **"17/17 F-requirements, 11/11 UC patuh"** dalam NEW_ARCHITECTURE.md
   - **F4.1/UC-07** — "papar tugasan khusus staf log masuk" berfungsi, tetapi
     tiada penguatkuasaan pemilikan (Isu #A) → sepatutnya "✅ dengan kaveat
     keselamatan" atau "⚠️ Separa".
-  - **F4.4/UC-08** — muat naik bukti kerja **GAGAL pada persekitaran sebenar
-    semasa** (Isu #B). Kod betul terhadap schema.sql, tetapi "patuh" tidak
-    boleh didakwa selagi DB tempatan belum dijajarkan.
+  - ~~**F4.4/UC-08** — muat naik bukti kerja GAGAL pada persekitaran sebenar
+    semasa (Isu #B)~~ — **dinaikkan semula ke ✅ Patuh** selepas migrasi
+    `CHANGE COLUMN` dan ujian semula laluan penuh LULUS (lihat seksyen
+    "Ujian Semula (2026-07-03) — Isu #B").
   - **F3.1–F3.2 (laluan AI)** — tidak dapat disahkan dalam persekitaran ini
     (Isu #C); hanya Round-Robin terbukti hujung-ke-hujung.
-- Pembetulan untuk Isu #A dan #B hendaklah dibuat sebagai **prompt berasingan**
-  selepas laporan ini disemak, mengikut disiplin audit-kemudian-baiki.
+- ~~Pembetulan untuk Isu #A dan #B hendaklah dibuat sebagai prompt berasingan~~
+  **Kemas kini:** Isu #B SELESAI (migrasi + ujian semula LULUS, 2026-07-03).
+  Yang masih terbuka: **Isu #A (IDOR)** — memerlukan prompt pembetulan
+  berasingan — dan Isu #C/#D (persekitaran/data, tindakan pengguna).
