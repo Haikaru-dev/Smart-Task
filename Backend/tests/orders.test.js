@@ -94,38 +94,104 @@ describe('POST /api/orders — cipta tempahan + 4 tugasan lalai (isu #12)', () =
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe('PATCH /api/orders/:id/status — kemaskini status (UC-11, isu #1)', () => {
+// PATCH /api/orders/:id/status DIBUANG — status order kini automatik (syncOrderStatus).
+// Digantikan POST /api/orders/:id/terminate (butang 'Batalkan Tempahan').
+describe('POST /api/orders/:id/terminate — batalkan tempahan (aliran berperingkat)', () => {
 
-    it('berjaya (200) dengan status sah "In Progress"', async () => {
-        db.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    it('berjaya (200): padam SEMUA tugasan + set Cancelled dalam transaksi', async () => {
+        const conn = mockConnection();
+        conn.query
+            .mockResolvedValueOnce([[{ status: 'In Progress' }]]) // SELECT ... FOR UPDATE
+            .mockResolvedValueOnce([{ affectedRows: 4 }])         // DELETE FROM tasks
+            .mockResolvedValueOnce([{}]);                         // UPDATE orders → Cancelled
+        db.getConnection.mockResolvedValue(conn);
 
         const res = await request(app)
-            .patch('/api/orders/9/status')
-            .set('Authorization', `Bearer ${tokenManager()}`)
-            .send({ status: 'In Progress' });
+            .post('/api/orders/9/terminate')
+            .set('Authorization', `Bearer ${tokenManager()}`);
 
         expect(res.status).toBe(200);
-        expect(res.body.status).toBe('In Progress');
+        expect(res.body.deletedTasks).toBe(4);
+        expect(conn.beginTransaction).toHaveBeenCalledTimes(1);
+        expect(conn.commit).toHaveBeenCalledTimes(1);
+        expect(conn.query.mock.calls[1][0]).toMatch(/DELETE FROM tasks/i);
+        expect(conn.query.mock.calls[2][0]).toMatch(/SET status = 'Cancelled'/i);
     });
 
-    it('tolak (400) status TIDAK sah ("Selesai" bukan nilai ENUM)', async () => {
-        const res = await request(app)
-            .patch('/api/orders/9/status')
-            .set('Authorization', `Bearer ${tokenManager()}`)
-            .send({ status: 'Selesai' });
+    it('tolak (409) — tempahan sudah Completed tidak boleh dibatalkan', async () => {
+        const conn = mockConnection();
+        conn.query.mockResolvedValueOnce([[{ status: 'Completed' }]]);
+        db.getConnection.mockResolvedValue(conn);
 
-        expect(res.status).toBe(400);
-        expect(db.query).not.toHaveBeenCalled();
+        const res = await request(app)
+            .post('/api/orders/9/terminate')
+            .set('Authorization', `Bearer ${tokenManager()}`);
+
+        expect(res.status).toBe(409);
+        expect(conn.rollback).toHaveBeenCalledTimes(1);
+        expect(conn.commit).not.toHaveBeenCalled();
+    });
+
+    it('tolak (404) — tempahan tidak wujud', async () => {
+        const conn = mockConnection();
+        conn.query.mockResolvedValueOnce([[]]);
+        db.getConnection.mockResolvedValue(conn);
+
+        const res = await request(app)
+            .post('/api/orders/99/terminate')
+            .set('Authorization', `Bearer ${tokenManager()}`);
+
+        expect(res.status).toBe(404);
     });
 
     it('tolak (403) jika peranan Staff', async () => {
         const res = await request(app)
-            .patch('/api/orders/9/status')
-            .set('Authorization', `Bearer ${tokenStaff()}`)
-            .send({ status: 'In Progress' });
+            .post('/api/orders/9/terminate')
+            .set('Authorization', `Bearer ${tokenStaff()}`);
 
         expect(res.status).toBe(403);
-        expect(db.query).not.toHaveBeenCalled();
+        expect(db.getConnection).not.toHaveBeenCalled();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('POST /api/orders — penjanaan tugasan bersyarat ikut order_type (aliran berperingkat)', () => {
+
+    it("'Design Only' → HANYA 1 tugasan Design dijana", async () => {
+        const conn = mockConnection();
+        conn.query
+            .mockResolvedValueOnce([{ insertId: 43 }])
+            .mockResolvedValueOnce([{}]);
+        db.getConnection.mockResolvedValue(conn);
+
+        const res = await request(app)
+            .post('/api/orders')
+            .set('Authorization', `Bearer ${tokenManager()}`)
+            .send({ ...BODY_TEMPAHAN_SAH, order_type: 'Design Only' });
+
+        expect(res.status).toBe(201);
+        expect(conn.query.mock.calls[1][1]).toEqual([[[43, 'Design']]]);
+    });
+
+    it("'Product Only' TANPA fail design → 400, tiada transaksi dibuka", async () => {
+        const res = await request(app)
+            .post('/api/orders')
+            .set('Authorization', `Bearer ${tokenManager()}`)
+            .send({ ...BODY_TEMPAHAN_SAH, order_type: 'Product Only' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/fail design/i);
+        expect(db.getConnection).not.toHaveBeenCalled();
+    });
+
+    it('order_type tidak sah → 400', async () => {
+        const res = await request(app)
+            .post('/api/orders')
+            .set('Authorization', `Bearer ${tokenManager()}`)
+            .send({ ...BODY_TEMPAHAN_SAH, order_type: 'Cetak Sahaja' });
+
+        expect(res.status).toBe(400);
+        expect(db.getConnection).not.toHaveBeenCalled();
     });
 });
 
@@ -164,7 +230,7 @@ describe('GET /api/orders/:id/tasks — tugasan satu tempahan (isu #12)', () => 
         expect(res.body.map(t => t.task_type)).toEqual(['Design', 'Printing', 'Packing', 'Delivery']);
 
         // Susunan dijamin oleh ORDER BY FIELD(...) dalam SQL, dan param ialah id tempahan
-        expect(db.query.mock.calls[0][0]).toMatch(/ORDER BY FIELD\(task_type/i);
+        expect(db.query.mock.calls[0][0]).toMatch(/ORDER BY FIELD\(t\.task_type/i);
         expect(db.query.mock.calls[0][1]).toEqual(['42']);
     });
 });

@@ -105,6 +105,40 @@ function uploadSingle(field) {
     };
 }
 
+// ── Konfigurasi multer untuk fail design pelanggan (tempahan Product Only) ──
+const orderDesignDir = path.join(__dirname, 'uploads', 'orders');
+if (!fs.existsSync(orderDesignDir)) fs.mkdirSync(orderDesignDir, { recursive: true });
+
+const orderDesignStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, orderDesignDir),
+    filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, `order-design-${Date.now()}${ext}`);
+    }
+});
+
+const orderDesignUpload = multer({
+    storage: orderDesignStorage,
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+        if (allowed.includes(file.mimetype)) cb(null, true);
+        else cb(new Error('Jenis fail tidak dibenarkan. Hanya JPG, PNG, dan PDF diterima.'));
+    },
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+function uploadOrderDesign(field) {
+    return (req, res, next) => {
+        orderDesignUpload.single(field)(req, res, (err) => {
+            if (!err) return next();
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? 'Fail terlalu besar. Had maksimum ialah 5MB.'
+                : (err.message || 'Ralat muat naik fail.');
+            res.status(400).json({ error: msg });
+        });
+    };
+}
+
 // ── Konfigurasi multer untuk gambar profil staf (berasingan daripada lampiran tugasan) ──
 const staffPhotoDir = path.join(__dirname, 'uploads', 'staff');
 if (!fs.existsSync(staffPhotoDir)) fs.mkdirSync(staffPhotoDir, { recursive: true });
@@ -233,33 +267,51 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Endpoint untuk menambah tempahan baharu (berserta 4 tugasan lalai, dalam satu transaksi)
-app.post('/api/orders', verifyToken, requireRole('Manager'), async (req, res) => {
-    console.log("Data diterima:", req.body);
+app.post('/api/orders', verifyToken, requireRole('Manager'), uploadOrderDesign('design_file'), async (req, res) => {
     const { namaKlien, jenisItem, kuantiti, harga, tarikhSiap, jenisHantar, lokasiHantar, nota } = req.body;
+    const orderType = req.body.order_type || 'Design & Product';
     const order_number = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // multer simpan fail SEBELUM handler — padam semula jika permintaan ditolak
+    const cleanupFile = () => {
+        if (req.file) fs.unlink(req.file.path, () => {});
+    };
+
+    if (!TASKS_BY_ORDER_TYPE[orderType]) {
+        cleanupFile();
+        return res.status(400).json({
+            error: `Jenis tempahan tidak sah. Nilai dibenarkan: ${Object.keys(TASKS_BY_ORDER_TYPE).join(', ')}.`
+        });
+    }
+    if (orderType === 'Product Only' && !req.file) {
+        return res.status(400).json({
+            error: "Tempahan 'Product Only' wajib disertakan fail design pelanggan (JPG/PNG/PDF)."
+        });
+    }
+    const designFilePath = req.file ? `/uploads/orders/${req.file.filename}` : null;
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
         const orderSql = `INSERT INTO orders
-                     (order_number, client_name, item_type, quantity, price, due_date, delivery_type, delivery_location, specifications, status)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`;
-        const orderValues = [order_number, namaKlien, jenisItem, kuantiti, harga, tarikhSiap, jenisHantar, lokasiHantar, nota];
+                     (order_number, client_name, item_type, order_type, quantity, price, due_date, delivery_type, delivery_location, specifications, design_file_path, status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`;
+        const orderValues = [order_number, namaKlien, jenisItem, orderType, kuantiti, harga, tarikhSiap, jenisHantar, lokasiHantar, nota, designFilePath];
         const [orderResult] = await connection.query(orderSql, orderValues);
         const orderId = orderResult.insertId;
 
-        // Jana 4 jenis tugasan lalai — Admin boleh padam yang tak perlu selepas ini
-        const TASK_TYPES = ['Design', 'Printing', 'Packing', 'Delivery'];
-        const taskValues = TASK_TYPES.map(type => [orderId, type]);
+        // Jana tugasan mengikut jenis tempahan (aliran kerja berperingkat)
+        const taskValues = TASKS_BY_ORDER_TYPE[orderType].map(type => [orderId, type]);
         await connection.query(`INSERT INTO tasks (order_id, task_type) VALUES ?`, [taskValues]);
 
         await connection.commit();
-        console.log("Tempahan + 4 tugasan lalai berjaya disimpan dengan ID:", orderId);
-        return res.status(201).json({ message: "Tempahan berjaya disimpan!", orderId });
+        console.log(`Tempahan (${orderType}) + ${taskValues.length} tugasan berjaya disimpan dengan ID:`, orderId);
+        return res.status(201).json({ message: "Tempahan berjaya disimpan!", orderId, orderType });
 
     } catch (error) {
         await connection.rollback();
+        cleanupFile();
         console.error("Ralat MySQL:", error);
         return res.status(500).json({ error: "Gagal menyimpan data ke pangkalan data." });
     } finally {
@@ -271,8 +323,11 @@ app.post('/api/orders', verifyToken, requireRole('Manager'), async (req, res) =>
 app.get('/api/orders/:id/tasks', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
         const [results] = await db.query(
-            `SELECT id, task_type, status, approval_status, assigned_staff_id
-             FROM tasks WHERE order_id = ? ORDER BY FIELD(task_type, 'Design','Printing','Packing','Delivery')`,
+            `SELECT t.id, t.task_type, t.status, t.approval_status, t.assigned_staff_id,
+                    t.staff_notes, t.attachment_path, t.rejection_reason,
+                    s.full_name AS staff_name
+             FROM tasks t LEFT JOIN staff s ON s.id = t.assigned_staff_id
+             WHERE t.order_id = ? ORDER BY FIELD(t.task_type, 'Design','Printing','Packing','Delivery')`,
             [req.params.id]
         );
         res.status(200).json(results);
@@ -297,27 +352,43 @@ app.get('/api/orders', verifyToken, requireRole('Manager'), async (req, res) => 
     }
 });
 
-// Endpoint untuk kemaskini status tempahan (UC-11 / F2.3)
-app.patch('/api/orders/:id/status', verifyToken, requireRole('Manager'), async (req, res) => {
+// Batalkan tempahan (butang 'Terminate') — padam SEMUA tugasan order & set Cancelled.
+// Menggantikan PATCH /api/orders/:id/status (status kini automatik, lihat syncOrderStatus).
+app.post('/api/orders/:id/terminate', verifyToken, requireRole('Manager'), async (req, res) => {
+    const orderId = req.params.id;
+    const connection = await db.getConnection();
     try {
-        const orderId = req.params.id;
-        const { status } = req.body;
+        await connection.beginTransaction();
 
-        const ALLOWED = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
-        if (!status || !ALLOWED.includes(status)) {
-            return res.status(400).json({
-                error: `Status tidak sah. Nilai yang dibenarkan: ${ALLOWED.join(', ')}.`
+        const [[order]] = await connection.query(
+            `SELECT status FROM orders WHERE id = ? FOR UPDATE`, [orderId]
+        );
+        if (!order) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Tempahan tidak dijumpai.' });
+        }
+        if (order.status === 'Cancelled' || order.status === 'Completed') {
+            await connection.rollback();
+            return res.status(409).json({
+                error: `Tempahan berstatus '${order.status}' tidak boleh dibatalkan.`
             });
         }
 
-        const [result] = await db.query(`UPDATE orders SET status = ? WHERE id = ?`, [status, orderId]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Tempahan tidak dijumpai.' });
-        }
-        res.status(200).json({ message: 'Status tempahan berjaya dikemaskini.', orderId, status });
+        const [del] = await connection.query(`DELETE FROM tasks WHERE order_id = ?`, [orderId]);
+        await connection.query(`UPDATE orders SET status = 'Cancelled' WHERE id = ?`, [orderId]);
+
+        await connection.commit();
+        res.status(200).json({
+            message: `Tempahan dibatalkan. ${del.affectedRows} tugasan dipadam daripada sistem.`,
+            orderId,
+            deletedTasks: del.affectedRows
+        });
     } catch (err) {
-        console.error('Ralat PATCH /api/orders/:id/status:', err);
-        res.status(500).json({ error: 'Gagal mengemaskini status tempahan.' });
+        await connection.rollback();
+        console.error('Ralat POST /api/orders/:id/terminate:', err);
+        res.status(500).json({ error: 'Gagal membatalkan tempahan.' });
+    } finally {
+        connection.release();
     }
 });
 
@@ -788,15 +859,32 @@ app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (r
     try {
         // A. Cari tugas yang belum diagihkan (JOIN orders untuk due_date —
         //    diperlukan oleh semakan cuti per-tugasan di bawah)
-        const [tasks] = await db.query(
-            `SELECT tasks.*, orders.due_date
+        const [allUnassigned] = await db.query(
+            `SELECT tasks.*, orders.due_date, orders.delivery_type
              FROM tasks
              JOIN orders ON tasks.order_id = orders.id
              WHERE tasks.assigned_staff_id IS NULL AND tasks.status = 'Pending'`
         );
 
-        if (tasks.length === 0) {
+        if (allUnassigned.length === 0) {
             return res.status(200).json({ message: "Tiada tugasan baharu untuk diagihkan." });
+        }
+
+        // Gerbang peringkat (workflow.jpg) — sama seperti laluan AI: hanya peringkat
+        // aktif setiap order layak masuk giliran round-robin.
+        const rrOrderIds = [...new Set(allUnassigned.map(t => t.order_id))];
+        const [rrSiblingRows] = await db.query(
+            `SELECT id, order_id, task_type, status FROM tasks WHERE order_id IN (?)`,
+            [rrOrderIds]
+        );
+        const rrSiblingsByOrder = {};
+        rrSiblingRows.forEach(t => (rrSiblingsByOrder[t.order_id] = rrSiblingsByOrder[t.order_id] || []).push(t));
+        const tasks = allUnassigned.filter(t =>
+            isTaskAssignable(t, rrSiblingsByOrder[t.order_id] || [], t.delivery_type)
+        );
+
+        if (tasks.length === 0) {
+            return res.status(200).json({ message: "Tiada tugasan pada peringkat aktif untuk diagihkan — peringkat semasa masih menunggu hantaran staf / kelulusan admin." });
         }
 
         // B. Cari SEMUA staf aktif, bahagikan ikut peranan (Designer / Operator Am)
@@ -865,6 +953,14 @@ app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (r
             }
 
             await connection.commit();
+
+            // Status order automatik: agihan round-robin = "distributed" → In Progress
+            const assignedTaskIds = assignments.map(a => a.taskId);
+            const [rrOrders] = await db.query(
+                `SELECT DISTINCT order_id FROM tasks WHERE id IN (?)`, [assignedTaskIds]
+            );
+            for (const { order_id } of rrOrders) await syncOrderStatus(db, order_id);
+
             res.status(200).json({
                 message: `Berjaya! ${assignments.length} tugasan diagihkan.` +
                          (skippedTaskIds.length ? ` ${skippedTaskIds.length} tugasan dilangkau (semua staf bercuti sepanjang tempoh tugasan).` : ''),
@@ -930,22 +1026,42 @@ app.post('/api/manager/auto-assign', verifyToken, requireRole('Manager'), async 
         const activeOrderIds = activeOrders.map(o => o.id);
 
         // B. Dapatkan semua tugasan yang belum diagih bagi tempahan aktif tersebut
-        const [tasks] = await db.query(`
-            SELECT tasks.*, 
-                   orders.order_number, orders.client_name, orders.item_type, 
-                   orders.quantity, orders.due_date, orders.delivery_location, 
+        const [allUnassigned] = await db.query(`
+            SELECT tasks.*,
+                   orders.order_number, orders.client_name, orders.item_type,
+                   orders.quantity, orders.due_date, orders.delivery_location,
                    orders.delivery_type, orders.specifications
             FROM tasks
             JOIN orders ON tasks.order_id = orders.id
-            WHERE tasks.assigned_staff_id IS NULL 
+            WHERE tasks.assigned_staff_id IS NULL
               AND tasks.order_id IN (?)
         `, [activeOrderIds]);
 
+        if (allUnassigned.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: "Tiada tugasan baharu yang perlu diagihkan.",
+                assignments: []
+            });
+        }
+
+        // Gerbang peringkat (workflow.jpg): hanya tugasan pada peringkat AKTIF setiap
+        // order boleh dicadang — peringkat seterusnya menunggu kelulusan admin dahulu.
+        const [siblingRows] = await db.query(
+            `SELECT id, order_id, task_type, status FROM tasks WHERE order_id IN (?)`,
+            [activeOrderIds]
+        );
+        const siblingsByOrder = {};
+        siblingRows.forEach(t => (siblingsByOrder[t.order_id] = siblingsByOrder[t.order_id] || []).push(t));
+        const tasks = allUnassigned.filter(t =>
+            isTaskAssignable(t, siblingsByOrder[t.order_id] || [], t.delivery_type)
+        );
+
         if (tasks.length === 0) {
-            return res.status(200).json({ 
-                success: true, 
-                message: "Tiada tugasan baharu yang perlu diagihkan.", 
-                assignments: [] 
+            return res.status(200).json({
+                success: true,
+                message: "Tiada tugasan pada peringkat aktif untuk diagihkan — peringkat semasa masih menunggu hantaran staf / kelulusan admin.",
+                assignments: []
             });
         }
 
@@ -960,9 +1076,9 @@ app.post('/api/manager/auto-assign', verifyToken, requireRole('Manager'), async 
 
         // D. Ambil beban kerja semasa (workload) bagi setiap staf
         const [workloads] = await db.query(`
-            SELECT assigned_staff_id, COUNT(*) AS count 
-            FROM tasks 
-            WHERE status IN ('Pending', 'In Progress') 
+            SELECT assigned_staff_id, COUNT(*) AS count
+            FROM tasks
+            WHERE status IN ('Pending', 'In Progress', 'Submitted')
               AND assigned_staff_id IS NOT NULL
             GROUP BY assigned_staff_id
         `);
@@ -1058,7 +1174,9 @@ app.post('/api/manager/auto-assign', verifyToken, requireRole('Manager'), async 
         const prompt = `Anda adalah AI penjadualan pintar untuk syarikat percetakan SH Design & Print Sdn. Bhd.
 Tugas anda adalah untuk mengagihkan tugasan berikut kepada staf yang paling sesuai dengan memanggil fungsi 'assign_tasks'.
 
-Berikut adalah tugasan belum diagih berserta staf yang tersedia:
+Berikut adalah tugasan belum diagih berserta staf yang tersedia (NOTA: senarai ini
+sudah ditapis kepada PERINGKAT AKTIF sahaja bagi setiap tempahan — peringkat seterusnya
+hanya akan muncul selepas peringkat semasa diluluskan oleh admin):
 ${JSON.stringify(tasksForAI, null, 2)}
 
 Sila patuhi kriteria berikut:
@@ -1152,10 +1270,61 @@ function checkSkillMatch(taskType, jobTitle) {
     }
 }
 
+// ── Aliran kerja berperingkat (workflow.jpg) ──────────────────────
+const STAGE_ORDER = ['Design', 'Printing', 'Packing', 'Delivery'];
+const TASKS_BY_ORDER_TYPE = {
+    'Design Only':      ['Design'],
+    'Product Only':     ['Printing', 'Packing', 'Delivery'],
+    'Design & Product': STAGE_ORDER,
+};
+
+// Tugasan hanya boleh diagih (AI/round-robin/manual) jika SEMUA peringkat lebih
+// awal dalam order sama sudah Completed (diluluskan admin). Tugasan Delivery bagi
+// penghantaran External dikecualikan terus — admin sahkan sendiri (carta alir).
+function isExternalDelivery(deliveryType) {
+    return String(deliveryType || '').toLowerCase() === 'external';
+}
+
+function isTaskAssignable(task, siblingTasks, deliveryType) {
+    if (task.task_type === 'Delivery' && isExternalDelivery(deliveryType)) return false;
+    const stageIdx = STAGE_ORDER.indexOf(task.task_type);
+    if (stageIdx <= 0) return true; // Design atau jenis tidak dikenali — tiada peringkat awal
+    return siblingTasks.every(t => {
+        if (t.id === task.id) return true;
+        const i = STAGE_ORDER.indexOf(t.task_type);
+        return i === -1 || i >= stageIdx || t.status === 'Completed';
+    });
+}
+
+// Selaraskan status order secara AUTOMATIK daripada keadaan tugasannya.
+// Pending = belum ada tugasan diagih; In Progress = >=1 tugasan Confirmed sudah
+// diagih (atau sudah siap); Completed = SEMUA tugasan Completed. Order Cancelled
+// tidak disentuh. `conn` boleh jadi pool `db` atau connection dalam transaksi.
+async function syncOrderStatus(conn, orderId) {
+    const [[order]] = await conn.query(`SELECT status FROM orders WHERE id = ?`, [orderId]);
+    if (!order || order.status === 'Cancelled') return;
+    const [taskRows] = await conn.query(
+        `SELECT status, approval_status, assigned_staff_id FROM tasks WHERE order_id = ?`,
+        [orderId]
+    );
+    let newStatus = 'Pending';
+    if (taskRows.length > 0 && taskRows.every(t => t.status === 'Completed')) {
+        newStatus = 'Completed';
+    } else if (taskRows.some(t => t.approval_status === 'Confirmed'
+            && (t.assigned_staff_id !== null || t.status === 'Completed'))) {
+        newStatus = 'In Progress';
+    }
+    if (newStatus !== order.status) {
+        await conn.query(`UPDATE orders SET status = ? WHERE id = ?`, [newStatus, orderId]);
+    }
+}
+
 // ── Pembantu: Pengesahan agihan (kemahiran + konflik cuti) ────────
 async function validateAssignment(task_id, staff_id, start_time, end_time) {
     const [[taskRow]] = await db.query(
-        `SELECT task_type FROM tasks WHERE id = ?`, [task_id]
+        `SELECT tasks.task_type, tasks.order_id, orders.delivery_type
+         FROM tasks JOIN orders ON tasks.order_id = orders.id
+         WHERE tasks.id = ?`, [task_id]
     );
     if (!taskRow) return { valid: false, reason: `Tugasan #${task_id} tidak dijumpai.` };
 
@@ -1169,6 +1338,33 @@ async function validateAssignment(task_id, staff_id, start_time, end_time) {
             valid: false,
             reason: `Staf "${staffRow.full_name}" (${staffRow.job_title}) tidak sepadan dengan jenis tugasan "${taskRow.task_type}".`
         };
+    }
+
+    // Delivery External — admin sahkan sendiri, tidak boleh diagih kepada staf (carta alir)
+    if (taskRow.task_type === 'Delivery' && isExternalDelivery(taskRow.delivery_type)) {
+        return {
+            valid: false,
+            reason: `Penghantaran External (kurier) — tugasan Delivery disahkan sendiri oleh admin, tidak perlu diagih kepada staf.`
+        };
+    }
+
+    // Gerbang peringkat: semua peringkat lebih awal dalam order sama mesti Completed
+    const stageIdx = STAGE_ORDER.indexOf(taskRow.task_type);
+    if (stageIdx > 0) {
+        const [siblings] = await db.query(
+            `SELECT id, task_type, status FROM tasks WHERE order_id = ? AND id != ?`,
+            [taskRow.order_id, task_id]
+        );
+        const blocker = siblings.find(t => {
+            const i = STAGE_ORDER.indexOf(t.task_type);
+            return i > -1 && i < stageIdx && t.status !== 'Completed';
+        });
+        if (blocker) {
+            return {
+                valid: false,
+                reason: `Peringkat '${blocker.task_type}' belum diluluskan admin — tugasan '${taskRow.task_type}' hanya boleh diagih selepas peringkat sebelumnya siap.`
+            };
+        }
     }
 
     if (start_time && end_time) {
@@ -1255,6 +1451,14 @@ app.post('/api/tasks/save-assignments', verifyToken, requireRole('Manager'), asy
         }
 
         await connection.commit();
+
+        // Status order automatik: agihan disimpan+Confirmed = "distributed" → In Progress
+        const [orderRows] = await db.query(
+            `SELECT DISTINCT order_id FROM tasks WHERE id IN (?)`,
+            [assignments.map(a => a.task_id)]
+        );
+        for (const { order_id } of orderRows) await syncOrderStatus(db, order_id);
+
         res.status(200).json({
             success: true,
             message: `${assignments.length} tugasan berjaya disimpan dan staf boleh melihatnya sekarang!`
@@ -1296,12 +1500,14 @@ app.get('/api/staff/tasks/:staff_id', verifyToken, requireRole('Staff', 'Manager
 
         // Join tasks + orders untuk detail penuh
         const sql = `
-            SELECT 
+            SELECT
                 tasks.*,
                 orders.order_number,
                 orders.client_name,
                 orders.item_type,
-                orders.due_date
+                orders.due_date,
+                orders.order_type,
+                orders.design_file_path
             FROM tasks
             JOIN orders ON tasks.order_id = orders.id
             WHERE tasks.assigned_staff_id = ?
@@ -1486,7 +1692,9 @@ app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'),
         const taskId = parseInt(req.params.id, 10);
         const { status, notes } = req.body;
 
-        const ALLOWED = ['Pending', 'In Progress', 'Completed'];
+        // Staf HANTAR ('Submitted') dan bukan lagi menanda 'Completed' terus —
+        // 'Completed' hanya melalui kelulusan admin (PATCH /api/tasks/:id/review).
+        const ALLOWED = ['Pending', 'In Progress', 'Submitted'];
         if (!status || !ALLOWED.includes(status)) {
             return res.status(400).json({
                 error: `Status tidak sah. Nilai yang dibenarkan: ${ALLOWED.join(', ')}.`
@@ -1495,7 +1703,7 @@ app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'),
 
         // Dapatkan task beserta order_id dan semak pemilikan (Staff)
         const [[task]] = await db.query(
-            `SELECT assigned_staff_id, order_id FROM tasks WHERE id = ? AND approval_status = 'Confirmed'`,
+            `SELECT assigned_staff_id, order_id, status AS current_status FROM tasks WHERE id = ? AND approval_status = 'Confirmed'`,
             [taskId]
         );
         if (!task) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
@@ -1504,17 +1712,29 @@ app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'),
             return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh kemaskini tugasan sendiri.' });
         }
 
-        // Kemaskini status — sertakan attachment_path hanya jika fail baharu dimuatnaik
+        // Tugasan yang sedang menunggu kelulusan / sudah diluluskan dikunci daripada staf
+        if (task.current_status === 'Submitted' || task.current_status === 'Completed') {
+            if (req.file) fs.unlink(req.file.path, () => {});
+            return res.status(409).json({
+                error: task.current_status === 'Submitted'
+                    ? 'Tugasan sedang menunggu kelulusan admin — tidak boleh diubah.'
+                    : 'Tugasan sudah diluluskan (Completed) — tidak boleh diubah.'
+            });
+        }
+
+        // Kemaskini status — sertakan attachment_path hanya jika fail baharu dimuatnaik.
+        // Hantar semula ('Submitted') mengosongkan sebab penolakan terdahulu.
+        const clearRejection = status === 'Submitted' ? `, rejection_reason = NULL` : '';
         let attachmentPath = null;
         if (req.file) {
             attachmentPath = `/uploads/tasks/${req.file.filename}`;
             await db.query(
-                `UPDATE tasks SET status = ?, attachment_path = ?, staff_notes = ? WHERE id = ?`,
+                `UPDATE tasks SET status = ?, attachment_path = ?, staff_notes = ?${clearRejection} WHERE id = ?`,
                 [status, attachmentPath, notes || null, taskId]
             );
         } else {
             await db.query(
-                `UPDATE tasks SET status = ?, staff_notes = ? WHERE id = ?`,
+                `UPDATE tasks SET status = ?, staff_notes = ?${clearRejection} WHERE id = ?`,
                 [status, notes || null, taskId]
             );
         }
@@ -1528,6 +1748,92 @@ app.patch('/api/tasks/:id/status', verifyToken, requireRole('Staff', 'Manager'),
     }
 });
 
+// Semakan admin ke atas hantaran staf (carta alir: 'admin sahkan tugasan dihantar')
+// approve → Completed (peringkat seterusnya terbuka); reject → kembali In Progress + sebab.
+app.patch('/api/tasks/:id/review', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const taskId = req.params.id;
+        const { decision, reason } = req.body || {};
+
+        if (!['approve', 'reject'].includes(decision)) {
+            return res.status(400).json({ error: "Keputusan tidak sah. Nilai dibenarkan: 'approve' atau 'reject'." });
+        }
+        if (decision === 'reject' && (!reason || !String(reason).trim())) {
+            return res.status(400).json({ error: 'Sebab penolakan wajib diisi.' });
+        }
+
+        const [[task]] = await db.query(
+            `SELECT status, order_id FROM tasks WHERE id = ?`, [taskId]
+        );
+        if (!task) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
+        if (task.status !== 'Submitted') {
+            return res.status(409).json({ error: "Hanya tugasan berstatus 'Submitted' (menunggu kelulusan) boleh disemak." });
+        }
+
+        if (decision === 'approve') {
+            await db.query(
+                `UPDATE tasks SET status = 'Completed', rejection_reason = NULL WHERE id = ?`, [taskId]
+            );
+            await syncOrderStatus(db, task.order_id);
+            return res.status(200).json({ message: 'Tugasan diluluskan.', taskId, status: 'Completed' });
+        }
+
+        await db.query(
+            `UPDATE tasks SET status = 'In Progress', rejection_reason = ? WHERE id = ?`,
+            [String(reason).trim(), taskId]
+        );
+        res.status(200).json({ message: 'Tugasan ditolak dan dikembalikan kepada staf.', taskId, status: 'In Progress' });
+    } catch (err) {
+        console.error('Ralat PATCH /api/tasks/:id/review:', err);
+        res.status(500).json({ error: 'Gagal menyemak tugasan.' });
+    }
+});
+
+// Delivery External (JNT dsb.) — admin sahkan sendiri tanpa assign staf (carta alir).
+app.patch('/api/tasks/:id/complete-delivery', verifyToken, requireRole('Manager'), async (req, res) => {
+    try {
+        const taskId = req.params.id;
+        const [[task]] = await db.query(
+            `SELECT tasks.status, tasks.task_type, tasks.order_id, orders.delivery_type
+             FROM tasks JOIN orders ON tasks.order_id = orders.id
+             WHERE tasks.id = ?`, [taskId]
+        );
+        if (!task) return res.status(404).json({ error: 'Tugasan tidak dijumpai.' });
+        if (task.task_type !== 'Delivery' || !isExternalDelivery(task.delivery_type)) {
+            return res.status(409).json({
+                error: "Hanya tugasan Delivery bagi penghantaran External boleh disahkan terus oleh admin."
+            });
+        }
+        if (task.status === 'Completed') {
+            return res.status(409).json({ error: 'Tugasan Delivery ini sudah siap.' });
+        }
+
+        // Gerbang peringkat: semua peringkat sebelum Delivery mesti Completed dahulu
+        const [siblings] = await db.query(
+            `SELECT id, task_type, status FROM tasks WHERE order_id = ?`, [task.order_id]
+        );
+        const deliveryIdx = STAGE_ORDER.indexOf('Delivery');
+        const blocker = siblings.find(t => {
+            const i = STAGE_ORDER.indexOf(t.task_type);
+            return i > -1 && i < deliveryIdx && t.status !== 'Completed';
+        });
+        if (blocker) {
+            return res.status(409).json({
+                error: `Peringkat '${blocker.task_type}' belum selesai — Delivery hanya boleh disahkan selepas semua peringkat sebelumnya diluluskan.`
+            });
+        }
+
+        await db.query(
+            `UPDATE tasks SET status = 'Completed', rejection_reason = NULL WHERE id = ?`, [taskId]
+        );
+        await syncOrderStatus(db, task.order_id);
+        res.status(200).json({ message: 'Penghantaran external disahkan siap.', taskId, status: 'Completed' });
+    } catch (err) {
+        console.error('Ralat PATCH /api/tasks/:id/complete-delivery:', err);
+        res.status(500).json({ error: 'Gagal mengesahkan penghantaran.' });
+    }
+});
+
 // ── TUGASAN: DRAF MANAGEMENT ─────────────────────────────────────
 
 // Edit satu tugasan (admin ubah staf, jenis, deskripsi, masa)
@@ -1537,6 +1843,15 @@ app.put('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, res) 
         const { assigned_staff_id, task_type, description, start_time, end_time } = req.body;
         const fmtStart = start_time ? new Date(start_time).toISOString().slice(0, 19).replace('T', ' ') : null;
         const fmtEnd   = end_time   ? new Date(end_time).toISOString().slice(0, 19).replace('T', ' ')   : null;
+
+        // Semakan kemahiran + gerbang peringkat + Delivery External (guna validateAssignment
+        // yang sama dengan save-assignments; masa null → semakan cuti kekal logik asal di bawah)
+        if (assigned_staff_id) {
+            const gateCheck = await validateAssignment(taskId, assigned_staff_id, null, null);
+            if (!gateCheck.valid) {
+                return res.status(409).json({ error: gateCheck.reason });
+            }
+        }
 
         // Semakan konflik cuti (F3.3) — logik sama dengan auto-assign & generate-schedule
         let leaveWarning = null;
@@ -1575,6 +1890,11 @@ app.put('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, res) 
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: "Tugasan tidak dijumpai." });
         }
+
+        // Status order automatik — agihan mungkin ditambah/dibuang melalui edit ini
+        const [[edited]] = await db.query(`SELECT order_id FROM tasks WHERE id = ?`, [taskId]);
+        if (edited) await syncOrderStatus(db, edited.order_id);
+
         res.status(200).json({
             message: "Tugasan berjaya dikemaskini!",
             ...(leaveWarning ? { warning: leaveWarning } : {})
@@ -1591,6 +1911,11 @@ app.post('/api/tasks/confirm', verifyToken, requireRole('Manager'), async (req, 
         const { task_ids } = req.body || {};
         let result;
 
+        // Rekod order terlibat SEBELUM update — untuk penyelarasan status automatik
+        const [draftOrders] = Array.isArray(task_ids) && task_ids.length > 0
+            ? await db.query(`SELECT DISTINCT order_id FROM tasks WHERE approval_status = 'Draft' AND id IN (?)`, [task_ids])
+            : await db.query(`SELECT DISTINCT order_id FROM tasks WHERE approval_status = 'Draft'`);
+
         if (Array.isArray(task_ids) && task_ids.length > 0) {
             [result] = await db.query(
                 `UPDATE tasks SET approval_status = 'Confirmed'
@@ -1602,6 +1927,8 @@ app.post('/api/tasks/confirm', verifyToken, requireRole('Manager'), async (req, 
                 `UPDATE tasks SET approval_status = 'Confirmed' WHERE approval_status = 'Draft'`
             );
         }
+
+        for (const { order_id } of draftOrders) await syncOrderStatus(db, order_id);
 
         res.status(200).json({
             success: true,
@@ -1619,6 +1946,9 @@ app.delete('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, re
     try {
         const taskId = req.params.id;
 
+        // order_id diperlukan untuk penyelarasan status automatik selepas padam/reset
+        const [[taskRef]] = await db.query(`SELECT order_id FROM tasks WHERE id = ?`, [taskId]);
+
         // Kes 1: draf AI belum disahkan — reset ke kolam belum diagih (tingkah laku sedia ada, tak berubah)
         const [draftResult] = await db.query(
             `UPDATE tasks
@@ -1627,15 +1957,17 @@ app.delete('/api/tasks/:id', verifyToken, requireRole('Manager'), async (req, re
             [taskId]
         );
         if (draftResult.affectedRows > 0) {
+            if (taskRef) await syncOrderStatus(db, taskRef.order_id);
             return res.status(200).json({ message: "Draf tugasan berjaya dipadam dan dikembalikan ke senarai belum diagih." });
         }
 
-        // Kes 2 (BAHARU): tugasan lalai (auto-generated) belum diagih staf — padam terus
+        // Kes 2: tugasan lalai (auto-generated) belum diagih staf — padam terus
         const [hardDeleteResult] = await db.query(
             `DELETE FROM tasks WHERE id = ? AND approval_status = 'Confirmed' AND assigned_staff_id IS NULL`,
             [taskId]
         );
         if (hardDeleteResult.affectedRows > 0) {
+            if (taskRef) await syncOrderStatus(db, taskRef.order_id);
             return res.status(200).json({ message: "Tugasan berjaya dipadam." });
         }
 

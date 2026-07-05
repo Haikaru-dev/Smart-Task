@@ -48,6 +48,7 @@ function formatDate(dateStr) {
 function getTaskStatusBadge(status = '') {
   const s = status.toLowerCase().replace(' ', '');
   if (s === 'completed' || s === 'done') return { style: badge.success, label: 'Selesai' };
+  if (s === 'submitted')                return { style: badge.warning, label: 'Menunggu Kelulusan' };
   if (s === 'inprogress')               return { style: badge.info,    label: 'Dalam Proses' };
   return { style: badge.warning, label: 'Menunggu' };
 }
@@ -134,8 +135,11 @@ export default function TugasanStaf() {
   useAutoRefresh(() => { fetchTasks(true); fetchLeaveHistory(true); });
 
   // ── Metrik dikira secara dinamik ──
+  // 'Submitted' (menunggu kelulusan admin) dikira dalam Sedang Proses
   const countNew        = tasks.filter(t => t.status?.toLowerCase() === 'pending').length;
-  const countInProgress = tasks.filter(t => t.status?.toLowerCase() === 'in progress').length;
+  const countInProgress = tasks.filter(t =>
+    t.status?.toLowerCase() === 'in progress' || t.status?.toLowerCase() === 'submitted'
+  ).length;
   const countDone       = tasks.filter(t =>
     t.status?.toLowerCase() === 'completed' || t.status?.toLowerCase() === 'done'
   ).length;
@@ -378,6 +382,25 @@ export default function TugasanStaf() {
                               {task.description}
                             </span>
                           )}
+                          {task.design_file_path && (
+                            <a
+                              href={`${API_BASE_URL}${task.design_file_path}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: 11, color: '#6D28D9', textDecoration: 'none', fontWeight: 600 }}
+                            >
+                              📎 Design Pelanggan
+                            </a>
+                          )}
+                          {task.rejection_reason && task.status === 'In Progress' && (
+                            <span style={{
+                              fontSize: 11, color: '#B91C1C', background: '#FEF2F2',
+                              border: '1px solid #FCA5A5', borderRadius: 6,
+                              padding: '3px 8px', maxWidth: 220
+                            }}>
+                              Ditolak: {task.rejection_reason}
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -393,16 +416,22 @@ export default function TugasanStaf() {
                         <span style={stBadge}>{stLabel}</span>
                       </td>
 
-                      {/* Tindakan */}
+                      {/* Tindakan — dikunci bila menunggu kelulusan / sudah diluluskan */}
                       <td style={{ textAlign: 'center' }}>
-                        <button
-                          className="btn btn--secondary btn--sm"
-                          onClick={() => openModal(task)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                          id={`btn-kemaskini-${task.id}`}
-                        >
-                          <EditIcon /> Kemaskini
-                        </button>
+                        {task.status === 'Submitted' || task.status === 'Completed' ? (
+                          <span style={{ fontSize: 11.5, color: '#94A3B8' }}>
+                            {task.status === 'Submitted' ? 'Menunggu semakan admin' : 'Selesai ✓'}
+                          </span>
+                        ) : (
+                          <button
+                            className="btn btn--secondary btn--sm"
+                            onClick={() => openModal(task)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                            id={`btn-kemaskini-${task.id}`}
+                          >
+                            <EditIcon /> Kemaskini
+                          </button>
+                        )}
                         {task.attachment_path && (
                           <a
                             href={`${API_BASE_URL}${task.attachment_path}`}
@@ -518,9 +547,27 @@ export default function TugasanStaf() {
                   >
                     <option value="Pending">Menunggu (Pending)</option>
                     <option value="In Progress">Sedang Proses (In Progress)</option>
-                    <option value="Completed">Selesai (Completed)</option>
+                    <option value="Submitted">Hantar Tugasan (Menunggu Kelulusan Admin)</option>
                   </select>
+                  {form.status === 'Submitted' && (
+                    <span style={{ fontSize: 11.5, color: '#B45309' }}>
+                      Selepas dihantar, tugasan dikunci sehingga admin meluluskan atau menolaknya.
+                    </span>
+                  )}
                 </div>
+
+                {/* Sebab penolakan admin (jika hantaran sebelum ini ditolak) */}
+                {activeTask?.rejection_reason && (
+                  <div style={{
+                    padding: '10px 14px', borderRadius: 8, fontSize: 13,
+                    background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C',
+                  }}>
+                    <strong>Hantaran ditolak oleh admin:</strong> {activeTask.rejection_reason}
+                    <span style={{ display: 'block', fontSize: 11.5, marginTop: 4, color: '#991B1B' }}>
+                      Sila baiki dan hantar semula.
+                    </span>
+                  </div>
+                )}
 
                 {/* Lampiran sedia ada */}
                 {activeTask?.attachment_path && (

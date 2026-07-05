@@ -355,6 +355,27 @@ export default function JanaanJadual() {
     }
   };
 
+  // ── Kelulusan hantaran staf (aliran berperingkat — 'admin sahkan tugasan dihantar') ──
+  const [reviewingSubmissionId, setReviewingSubmissionId] = useState(null);
+  const [rejectSubmission, setRejectSubmission] = useState(null); // task | null
+  const [rejectSubmissionReason, setRejectSubmissionReason] = useState('');
+
+  const handleReviewSubmission = async (taskId, decision, reason = '') => {
+    setReviewingSubmissionId(taskId);
+    try {
+      const res = await axios.patch(`${API_BASE_URL}/api/tasks/${taskId}/review`, { decision, reason });
+      showToast('success', res.data?.message ||
+        (decision === 'approve' ? 'Tugasan diluluskan.' : 'Tugasan ditolak dan dikembalikan kepada staf.'));
+      setRejectSubmission(null);
+      setRejectSubmissionReason('');
+      await fetchBoard();
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Gagal menyemak tugasan.');
+    } finally {
+      setReviewingSubmissionId(null);
+    }
+  };
+
   const handleEditTask = (task) => {
     setEditingTask(task);
     setEditForm({
@@ -414,6 +435,7 @@ export default function JanaanJadual() {
   const hasProposals   = proposals !== null && proposals.length > 0;
   const hasTimeError   = proposals?.some(p => p.timeError) ?? false;
   const draftCount     = board.filter(t => t.approval_status === 'Draft').length;
+  const submittedTasks = board.filter(t => t.status === 'Submitted');
   const hasDrafts      = draftCount > 0;
   const totalPending   = board.filter(t => t.status?.toLowerCase() === 'pending' && t.approval_status === 'Confirmed').length;
   const totalCompleted = board.filter(t => t.status?.toLowerCase() === 'completed').length;
@@ -427,9 +449,10 @@ export default function JanaanJadual() {
   const staffColumns = Object.entries(grouped);
 
   const STATUS_COLUMNS = [
-    { key: 'Pending',     label: 'Menunggu',     accent: '#D97706', badgeBg: '#FEF3C7', badgeColor: '#92400E' },
-    { key: 'In Progress', label: 'Dalam Proses', accent: '#2563EB', badgeBg: '#DBEAFE', badgeColor: '#1D4ED8' },
-    { key: 'Completed',   label: 'Selesai',      accent: '#16A34A', badgeBg: '#DCFCE7', badgeColor: '#15803D' },
+    { key: 'Pending',     label: 'Menunggu',           accent: '#D97706', badgeBg: '#FEF3C7', badgeColor: '#92400E' },
+    { key: 'In Progress', label: 'Dalam Proses',       accent: '#2563EB', badgeBg: '#DBEAFE', badgeColor: '#1D4ED8' },
+    { key: 'Submitted',   label: 'Menunggu Kelulusan', accent: '#B45309', badgeBg: '#FEF3C7', badgeColor: '#B45309' },
+    { key: 'Completed',   label: 'Selesai',            accent: '#16A34A', badgeBg: '#DCFCE7', badgeColor: '#15803D' },
   ];
   const filteredBoard = kanbanStaffFilter
     ? board.filter(task => task.staff_name === kanbanStaffFilter)
@@ -793,6 +816,67 @@ export default function JanaanJadual() {
             <p style={{ margin: 0, fontSize: 12, color: '#64748B' }}>
               {proposals.length} cadangan menunggu pengesahan · Guna butang <strong>"Sahkan Semua"</strong> di atas untuk simpan ke pangkalan data.
             </p>
+          </div>
+        </section>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════
+          BAHAGIAN 1.5 — MENUNGGU KELULUSAN (HANTARAN STAF)
+      ══════════════════════════════════════════════════════════ */}
+      {submittedTasks.length > 0 && (
+        <section className="section-card" aria-label="Menunggu Kelulusan" style={{ marginBottom: 20 }}>
+          <header className="section-card-header">
+            <div className="section-card-title">
+              <div className="title-accent-dot" style={{ background: '#D97706' }} />
+              Menunggu Kelulusan
+              <span style={{ fontSize: 11, marginLeft: 4, padding: '2px 9px', borderRadius: 20,
+                background: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>
+                {submittedTasks.length} hantaran
+              </span>
+            </div>
+          </header>
+          <div style={{ padding: '4px 24px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {submittedTasks.map(t => {
+              const busy = reviewingSubmissionId === t.id;
+              return (
+                <div key={t.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                  padding: '10px 14px', borderRadius: 10,
+                  background: '#FFFBEB', border: '1px solid #FCD34D', fontSize: 13
+                }}>
+                  <span style={{ fontWeight: 700, color: '#0F172A', minWidth: 66 }}>{t.task_type}</span>
+                  <span style={{ color: '#475569' }}>
+                    {t.order_number || `Order #${t.order_id}`} · {t.staff_name || 'Tanpa staf'}
+                  </span>
+                  {t.attachment_path && (
+                    <a href={`${API_BASE_URL}${t.attachment_path}`} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 600 }}>
+                      📎 Hasil Kerja
+                    </a>
+                  )}
+                  {t.staff_notes && (
+                    <span style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic',
+                      maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={t.staff_notes}>
+                      “{t.staff_notes}”
+                    </span>
+                  )}
+                  <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                    <button className="btn btn--primary" disabled={busy}
+                      style={{ padding: '4px 14px', fontSize: 12 }}
+                      onClick={() => handleReviewSubmission(t.id, 'approve')}>
+                      {busy ? '…' : '✓ Lulus'}
+                    </button>
+                    <button disabled={busy}
+                      style={{ padding: '4px 14px', fontSize: 12, borderRadius: 8, cursor: 'pointer',
+                        border: '1px solid #FCA5A5', background: '#FFF1F2', color: '#B91C1C', fontWeight: 600 }}
+                      onClick={() => { setRejectSubmission(t); setRejectSubmissionReason(''); }}>
+                      ✕ Tolak
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -1173,6 +1257,57 @@ export default function JanaanJadual() {
               <button className="btn btn--primary" onClick={confirmDeleteProposal}
                 style={{ background: '#B91C1C', borderColor: '#B91C1C' }}>
                 Padam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════
+          MODAL: SEBAB PENOLAKAN HANTARAN STAF
+      ══════════════════════════════════════════════════════════ */}
+      {rejectSubmission && (
+        <div
+          role="dialog" aria-modal="true" aria-labelledby="dlg-tolak-title"
+          style={overlaySty}
+          onClick={() => setRejectSubmission(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 16, maxWidth: 440, width: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.18)', overflow: 'hidden',
+            animation: 'slideIn 0.2s ease'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '24px 24px 20px' }}>
+              <h2 id="dlg-tolak-title" style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#0F172A' }}>
+                Tolak Hantaran — {rejectSubmission.task_type}
+              </h2>
+              <p style={{ margin: '0 0 14px', fontSize: 13, color: '#475569' }}>
+                {rejectSubmission.order_number || `Order #${rejectSubmission.order_id}`} · {rejectSubmission.staff_name || 'Tanpa staf'} —
+                tugasan akan dikembalikan kepada staf ('Dalam Proses') bersama sebab di bawah.
+              </p>
+              <label className="form-label" style={{ fontSize: 12 }}>
+                Sebab Penolakan <span className="required">*</span>
+              </label>
+              <textarea
+                className="form-input"
+                rows={3}
+                value={rejectSubmissionReason}
+                onChange={e => setRejectSubmissionReason(e.target.value)}
+                placeholder="Nyatakan apa yang perlu dibaiki oleh staf..."
+                style={{ resize: 'vertical', fontSize: 13, width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{
+              padding: '14px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0',
+              display: 'flex', justifyContent: 'flex-end', gap: 10
+            }}>
+              <button className="btn btn--secondary" onClick={() => setRejectSubmission(null)}>
+                Batal
+              </button>
+              <button className="btn btn--primary"
+                disabled={!rejectSubmissionReason.trim() || reviewingSubmissionId === rejectSubmission.id}
+                onClick={() => handleReviewSubmission(rejectSubmission.id, 'reject', rejectSubmissionReason.trim())}
+                style={{ background: '#B91C1C', borderColor: '#B91C1C' }}>
+                {reviewingSubmissionId === rejectSubmission.id ? 'Menghantar…' : 'Tolak Hantaran'}
               </button>
             </div>
           </div>

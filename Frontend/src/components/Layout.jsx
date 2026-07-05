@@ -1,8 +1,10 @@
 // src/components/Layout.jsx
 // ================================================================
 // PANTANG LARANG: Fail ini HANYA mengandungi struktur UI sahaja.
-// Tiada logik axios, state, atau panggilan API di sini.
+// Tiada logik axios atau panggilan API di sini (state UI setempat
+// seperti lipat-sidebar dibenarkan).
 // ================================================================
+import { useState } from 'react';
 import { NavLink, Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import '../smarttask.css'; // <-- pastikan path betul mengikut struktur projek anda
 
@@ -71,7 +73,7 @@ const NAV_ITEMS = [
         items: [
             { label: 'Janaan Jadual', to: '/jadual', icon: ICONS.schedule },
             { label: 'Senarai Staf', to: '/staf', icon: ICONS.staff },
-            { label: 'Cuti', to: '/cuti', icon: ICONS.leave, badge: 1 },
+            { label: 'Cuti', to: '/cuti', icon: ICONS.leave },
         ],
     },
 ];
@@ -79,9 +81,9 @@ const NAV_ITEMS = [
 // ================================================================
 // KOMPONEN: Sidebar
 // ================================================================
-function Sidebar({ onLogout }) {
+function Sidebar({ onLogout, collapsed, onToggle }) {
     return (
-        <aside className="sidebar">
+        <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}>
             {/* ── Brand ── */}
             <div className="sidebar-brand">
                 <div className="sidebar-logo-box">
@@ -96,6 +98,20 @@ function Sidebar({ onLogout }) {
                     <span className="sidebar-brand-sub">Admin Portal</span>
                 </div>
             </div>
+
+            {/* ── Butang lipat/kembang sidebar ── */}
+            <button
+                className="sidebar-collapse-btn"
+                onClick={onToggle}
+                title={collapsed ? 'Kembangkan menu' : 'Kecilkan menu'}
+            >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    {collapsed
+                        ? <polyline points="9 18 15 12 9 6" />
+                        : <polyline points="15 18 9 12 15 6" />}
+                </svg>
+            </button>
 
             {/* ── Navigation ── */}
             <nav className="sidebar-nav">
@@ -198,6 +214,17 @@ function Topbar() {
 export default function Layout() {
     const navigate = useNavigate();
 
+    // ── Lipat/kembang sidebar — pilihan disimpan dalam localStorage ──
+    const [collapsed, setCollapsed] = useState(
+        () => localStorage.getItem('sidebarCollapsed') === '1'
+    );
+    function toggleSidebar() {
+        setCollapsed(prev => {
+            localStorage.setItem('sidebarCollapsed', prev ? '0' : '1');
+            return !prev;
+        });
+    }
+
     // ── Fungsi logout — ubah mengikut logik logout asal anda ──
     function handleLogout() {
         localStorage.removeItem('user');
@@ -208,8 +235,8 @@ export default function Layout() {
 
     return (
         <div className="app-shell">
-            <Sidebar onLogout={handleLogout} />
-            <main className="main-area">
+            <Sidebar onLogout={handleLogout} collapsed={collapsed} onToggle={toggleSidebar} />
+            <main className={`main-area${collapsed ? ' main-area--sidebar-collapsed' : ''}`}>
                 <Topbar />
                 {/* Outlet = kandungan halaman aktif (Dashboard, Tempahan, dll.) */}
                 <Outlet />

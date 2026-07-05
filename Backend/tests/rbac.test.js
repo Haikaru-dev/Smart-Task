@@ -18,13 +18,17 @@ beforeEach(() => {
     jest.clearAllMocks();
 });
 
-// 26 route yang memerlukan requireRole('Manager') — senarai eksplisit penuh,
-// disemak terhadap server.js (grep requireRole('Manager')), tiada yang dilangkau
+// Route yang memerlukan requireRole('Manager') — senarai eksplisit penuh,
+// disemak terhadap server.js (grep requireRole('Manager')), tiada yang dilangkau.
+// (PATCH /api/orders/:id/status dibuang — status order kini automatik;
+//  digantikan terminate + review + complete-delivery, aliran berperingkat.)
 const ROUTE_MANAGER_SAHAJA = [
     ['post',   '/api/orders'],
     ['get',    '/api/orders'],
     ['get',    '/api/orders/1/tasks'],
-    ['patch',  '/api/orders/1/status'],
+    ['post',   '/api/orders/1/terminate'],
+    ['patch',  '/api/tasks/1/review'],
+    ['patch',  '/api/tasks/1/complete-delivery'],
     ['get',    '/api/dashboard/stats'],
     ['get',    '/api/dashboard/audit-logs'],
     ['get',    '/api/dashboard/order-trends'],

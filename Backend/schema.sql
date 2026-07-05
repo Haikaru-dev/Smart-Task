@@ -56,13 +56,19 @@ CREATE TABLE IF NOT EXISTS orders (
     order_number      VARCHAR(50)    NOT NULL COMMENT 'Format: ORD-YYYYMMDD-XXXX (dijana oleh server)',
     client_name       VARCHAR(150)   NOT NULL,
     item_type         VARCHAR(100)   NOT NULL,
+    order_type        ENUM('Design Only','Product Only','Design & Product')
+                                     NOT NULL DEFAULT 'Design & Product'
+        COMMENT 'Menentukan tugasan yang dijana: Design Only=[Design]; Product Only=[Printing,Packing,Delivery]; Design & Product=semua 4',
     quantity          INT            NOT NULL DEFAULT 1,
     price             DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
     due_date          DATE           NOT NULL,
     delivery_type     VARCHAR(50)    NULL     COMMENT 'Contoh: Internal, External',
     delivery_location VARCHAR(255)   NULL,
     specifications    TEXT           NULL,
-    status            ENUM('Pending','In Progress','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
+    design_file_path  VARCHAR(255)   NULL
+        COMMENT 'Fail design pelanggan (Product Only), contoh: /uploads/orders/order-design-1234567890.pdf',
+    status            ENUM('Pending','In Progress','Completed','Cancelled') NOT NULL DEFAULT 'Pending'
+        COMMENT 'AUTOMATIK sejak aliran berperingkat: Pending=belum diagih; In Progress=tugasan disahkan+diagih; Completed=semua tugasan diluluskan; Cancelled=butang Batalkan',
     created_at        TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_orders_number (order_number)
@@ -79,13 +85,16 @@ CREATE TABLE IF NOT EXISTS tasks (
     assigned_staff_id INT         NULL,
     start_time        DATETIME    NULL,
     end_time          DATETIME    NULL,
-    status            ENUM('Pending','In Progress','Completed') NOT NULL DEFAULT 'Pending',
+    status            ENUM('Pending','In Progress','Submitted','Completed') NOT NULL DEFAULT 'Pending'
+        COMMENT 'Submitted = staf sudah hantar, menunggu kelulusan admin; Completed = diluluskan admin',
     approval_status   ENUM('Draft','Confirmed')                 NOT NULL DEFAULT 'Confirmed'
         COMMENT 'Draft = belum disahkan admin; Confirmed = staf boleh lihat',
     attachment_path   VARCHAR(255) NULL
         COMMENT 'Laluan relatif fail yang dimuat naik oleh staf, contoh: /uploads/tasks/task-1-1234567890.pdf',
     staff_notes       TEXT        NULL
         COMMENT 'Nota / catatan daripada staf semasa kemaskini status tugasan',
+    rejection_reason  TEXT        NULL
+        COMMENT 'Sebab admin menolak hantaran tugasan — dikosongkan bila diluluskan/dihantar semula',
     created_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     CONSTRAINT fk_tasks_order

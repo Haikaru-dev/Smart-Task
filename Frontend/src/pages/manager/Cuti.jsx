@@ -1,5 +1,6 @@
 // src/pages/Cuti.jsx
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 import Pagination from '../../components/Pagination';
@@ -48,6 +49,7 @@ const UserOffIcon = () => (
 // KOMPONEN UTAMA
 // ================================================================
 export default function Cuti() {
+  const navigate = useNavigate();
   const [leaves, setLeaves]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
@@ -128,7 +130,7 @@ export default function Cuti() {
 
   // ── KPI Cards ──
   const kpiCards = [
-    { label: 'Staf Bercuti Hari Ini', value: onLeaveToday,    cls: 'kpi-card kpi-card--red',  Icon: UserOffIcon, footer: 'Berdasarkan rekod diluluskan' },
+    { label: 'Staf Bercuti Hari Ini', value: onLeaveToday,    cls: 'kpi-card kpi-card--red',  Icon: UserOffIcon, footer: 'Klik untuk lihat Senarai Staf', navigateTo: '/staf' },
     { label: 'Permohonan Bulan Ini',  value: thisMonthCount,  cls: 'kpi-card kpi-card--blue', Icon: CalendarIcon, footer: 'Semua status termasuk' },
     { label: 'Menunggu Kelulusan',    value: pendingCount,    cls: 'kpi-card kpi-card--amber', Icon: ClockIcon,   footer: 'Perlu tindakan segera' },
   ];
@@ -147,7 +149,13 @@ export default function Cuti() {
       {/* ── KPI Cards ── */}
       <div className="kpi-grid kpi-grid--3">
         {kpiCards.map(card => (
-          <div key={card.label} className={card.cls}>
+          <div
+            key={card.label}
+            className={card.cls}
+            onClick={card.navigateTo ? () => navigate(card.navigateTo) : undefined}
+            style={card.navigateTo ? { cursor: 'pointer' } : undefined}
+            title={card.navigateTo ? 'Klik untuk ke Senarai Staf' : undefined}
+          >
             <div className="kpi-top">
               <div className="kpi-label">{card.label}</div>
               <div className="kpi-value">{card.value}</div>

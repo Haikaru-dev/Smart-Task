@@ -1,4 +1,5 @@
 // src/components/StaffLayout.jsx
+import { useState } from 'react';
 import { NavLink, Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import '../smarttask.css';
 
@@ -20,11 +21,12 @@ const CalendarIcon = () => (
     <line x1="3" y1="10" x2="21" y2="10" />
   </svg>
 );
-const BellIcon = () => (
+const ChevronIcon = ({ collapsed }) => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-    stroke="#64748B" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    {collapsed
+      ? <polyline points="9 18 15 12 9 6" />
+      : <polyline points="15 18 9 12 15 6" />}
   </svg>
 );
 
@@ -52,12 +54,14 @@ function getInitials(name = '') {
 // ================================================================
 // KOMPONEN: Staff Sidebar
 // ================================================================
-function StaffSidebar({ staffName, staffRole, onLogout }) {
+function StaffSidebar({ staffName, staffRole, onLogout, collapsed, onToggle }) {
+  const W = collapsed ? 64 : 235;
   return (
-    <aside style={sidebarStyles.aside}>
+    <aside style={{ ...sidebarStyles.aside, width: W, minWidth: W }}
+      className={collapsed ? 'sidebar--collapsed' : undefined}>
 
       {/* ── Brand ── */}
-      <div style={sidebarStyles.brand}>
+      <div style={{ ...sidebarStyles.brand, ...(collapsed ? { justifyContent: 'center', padding: '18px 0 16px' } : {}) }}>
         <div style={sidebarStyles.logoBox}>
           {/* Grid icon */}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -68,24 +72,36 @@ function StaffSidebar({ staffName, staffRole, onLogout }) {
             <rect x="14" y="14" width="7" height="7" rx="1" />
           </svg>
         </div>
-        <div>
-          <div style={sidebarStyles.brandName}>MY STAFF PORTAL</div>
-          <div style={sidebarStyles.brandSub}>SmartTask · SH Design</div>
-        </div>
+        {!collapsed && (
+          <div>
+            <div style={sidebarStyles.brandName}>MY STAFF PORTAL</div>
+            <div style={sidebarStyles.brandSub}>SmartTask · SH Design</div>
+          </div>
+        )}
       </div>
+
+      {/* ── Butang lipat/kembang sidebar ── */}
+      <button
+        className="sidebar-collapse-btn"
+        onClick={onToggle}
+        title={collapsed ? 'Kembangkan menu' : 'Kecilkan menu'}
+      >
+        <ChevronIcon collapsed={collapsed} />
+      </button>
 
       {/* ── Divider ── */}
       <div style={sidebarStyles.divider} />
 
       {/* ── Nav ── */}
       <nav style={sidebarStyles.nav}>
-        <div style={sidebarStyles.sectionLabel}>MENU UTAMA</div>
+        {!collapsed && <div style={sidebarStyles.sectionLabel}>MENU UTAMA</div>}
         {NAV_ITEMS.map(({ label, to, Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
             style={{ marginBottom: 2 }}
+            title={collapsed ? label : undefined}
           >
             <Icon />
             <span>{label}</span>
@@ -139,12 +155,6 @@ function StaffTopbar() {
         <span className="bc-item active">{current}</span>
       </div>
 
-      {/* Kanan: notif */}
-      <div className="topbar-actions">
-        <button className="topbar-icon-btn" title="Notifikasi">
-          <BellIcon />
-        </button>
-      </div>
     </header>
   );
 }
@@ -161,6 +171,17 @@ export default function StaffLayout() {
   const staffName = staffUser.name || 'Staf Portal';
   const staffRole = staffUser.role || 'Pekerja';
 
+  // ── Lipat/kembang sidebar — pilihan dikongsi dengan portal Admin ──
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem('sidebarCollapsed') === '1'
+  );
+  function toggleSidebar() {
+    setCollapsed(prev => {
+      localStorage.setItem('sidebarCollapsed', prev ? '0' : '1');
+      return !prev;
+    });
+  }
+
   function handleLogout() {
     localStorage.removeItem('staffUser');
     localStorage.removeItem('user');
@@ -175,10 +196,12 @@ export default function StaffLayout() {
         staffName={staffName}
         staffRole={staffRole}
         onLogout={handleLogout}
+        collapsed={collapsed}
+        onToggle={toggleSidebar}
       />
 
       {/* Kawasan Utama */}
-      <main className="main-area" style={{ background: '#F4F6F9' }}>
+      <main className="main-area" style={{ background: '#F4F6F9', marginLeft: collapsed ? 64 : 235 }}>
         <StaffTopbar />
         {/* Halaman aktif dirender di sini */}
         <Outlet />

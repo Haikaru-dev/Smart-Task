@@ -258,13 +258,15 @@ Kamus Data FYP" membandingkan dengan Jadual 3.17–3.22 rasmi.
 | order_number | VARCHAR(50) UNIQUE | Format `ORD-YYYYMMDD-XXXX`, dijana server |
 | client_name | VARCHAR(150) | |
 | item_type | VARCHAR(100) | |
+| **order_type** | ENUM('Design Only','Product Only','Design & Product') DEFAULT 'Design & Product' | **Baharu 2026-07-06 (§12 #16)** — menentukan tugasan dijana: `[Design]` / `[Printing,Packing,Delivery]` / semua 4 |
 | quantity | INT | |
 | **price** | DECIMAL(10,2) | **Tambahan** — tiada dalam kamus data |
 | due_date | DATE | |
-| delivery_type | VARCHAR(50) | Nilai guna: `Internal`/`External` (bukan ENUM DB, hanya komen) |
+| delivery_type | VARCHAR(50) | Nilai guna: `internal`/`external` (bukan ENUM DB; perbandingan backend tak sensitif huruf) — External: tugasan Delivery TIDAK diagih staf, admin sahkan sendiri (§12 #16) |
 | delivery_location | VARCHAR(255) NULL | |
 | specifications | TEXT NULL | |
-| status | ENUM('Pending','In Progress','Completed','**Cancelled**') | `Cancelled` **tambahan**, tiada dalam kamus data |
+| **design_file_path** | VARCHAR(255) NULL | **Baharu 2026-07-06 (§12 #16)** — fail design pelanggan (wajib untuk Product Only), `/uploads/orders/` |
+| status | ENUM('Pending','In Progress','Completed','**Cancelled**') | Sejak 2026-07-06 status **AUTOMATIK** (`syncOrderStatus`, §10.5) — dropdown manual dibuang; `Cancelled` hanya melalui butang Batalkan. ⚠️ DB tempatan lama tiada nilai `Cancelled` dalam ENUM (disimpan `''` senyap) — dibaiki oleh `migrations/add_order_workflow.sql` |
 | created_at | TIMESTAMP | |
 
 > **Perbezaan dengan Kamus Data:** `price` dan status `Cancelled` ialah tambahan
@@ -281,10 +283,11 @@ Kamus Data FYP" membandingkan dengan Jadual 3.17–3.22 rasmi.
 | description | TEXT NULL | |
 | assigned_staff_id | INT NULL, FK → `staff.id` **ON DELETE SET NULL** | NULL = belum diagihkan |
 | start_time / end_time | DATETIME NULL | Diisi enjin AI/Round-Robin |
-| status | ENUM('Pending','In Progress','Completed') | |
+| status | ENUM('Pending','In Progress','**Submitted**','Completed') | **`Submitted` baharu 2026-07-06 (§12 #16)** — staf hantar, menunggu kelulusan admin; staf TIDAK lagi boleh set `Completed` terus |
 | **approval_status** | **ENUM('Draft','Confirmed') DEFAULT 'Confirmed'** | **Tiada dalam kamus data ATAU dokumentasi lama** — teras aliran draf-dan-sahkan (§11) |
 | attachment_path | VARCHAR(255) NULL | Bukti kerja staf, cth. `/uploads/tasks/task-1-…pdf` |
 | staff_notes | TEXT NULL | Nota/catatan staf semasa kemaskini status (ditambah 2026-07-02, migrasi `add_task_staff_notes.sql` — §12 #2 selesai) |
+| **rejection_reason** | TEXT NULL | **Baharu 2026-07-06 (§12 #16)** — sebab admin tolak hantaran; dikosongkan bila lulus/hantar semula |
 | created_at | TIMESTAMP | |
 
 > **Perbezaan dengan Kamus Data:**
@@ -324,7 +327,7 @@ tepat seperti kamus data). Ini keputusan skop untuk Kalll — bukan bug teknikal
 
 ---
 
-## 6. API Endpoints (Disahkan — 35 route, semua dalam `Backend/server.js`)
+## 6. API Endpoints (Disahkan — 37 route, semua dalam `Backend/server.js`)
 
 Semua endpoint berprefiks `/api/`. Port lalai `5000`. **Semua route bawah ini disahkan
 mempunyai `verifyToken`** (tiada lagi route yang "terlepas" middleware ini — isu ini
@@ -338,10 +341,10 @@ telah diperbetulkan sejak nota audit terdahulu).
 ### Tempahan (Orders)
 | Kaedah | Endpoint | Guard | F / UC |
 |---|---|---|---|
-| POST | `/api/orders` | Manager | F2.1, F2.2, UC-03 — kini turut jana **4 tugasan lalai** (Design/Printing/Packing/Delivery) dalam satu transaksi (§12 #12 selesai, 2026-07-03) |
-| GET | `/api/orders` | Manager | F2.4 |
-| GET | `/api/orders/:id/tasks` | Manager | Senarai tugasan satu tempahan, susunan `FIELD(Design→Delivery)` — untuk modal frontend (ditambah 2026-07-03, §12 #12) |
-| PATCH | `/api/orders/:id/status` | Manager | F2.3, UC-11 — validasi terhadap 4 ENUM status, ditambah 2026-07-02 (§12 #1 selesai) |
+| POST | `/api/orders` | Manager | F2.1, F2.2, UC-03 — kini **multipart** (fail `design_file` wajib untuk Product Only) + jana tugasan **bersyarat ikut `order_type`** (1/3/4 tugasan) dalam satu transaksi (§12 #12, #16) |
+| GET | `/api/orders` | Manager | F2.4 — turut pulangkan `order_type`, `design_file_path` |
+| GET | `/api/orders/:id/tasks` | Manager | Senarai tugasan satu tempahan, susunan `FIELD(Design→Delivery)`; sejak 2026-07-06 turut pulangkan `staff_name`, `rejection_reason`, `staff_notes`, `attachment_path` — untuk timeline modal (§12 #12, #16) |
+| POST | `/api/orders/:id/terminate` | Manager | **Baharu (§12 #16)** — butang Batalkan: padam SEMUA tugasan order + set `Cancelled` (transaksi); 409 jika sudah Cancelled/Completed. *Menggantikan `PATCH /api/orders/:id/status` yang DIBUANG — status kini automatik (§10.5)* |
 
 > Tiada `GET /api/orders/:id` — paparan detail guna data yang
 > sudah dimuatkan pada senarai (client-side), memadai untuk skala semasa.
@@ -383,7 +386,9 @@ telah diperbetulkan sejak nota audit terdahulu).
 | PUT | `/api/tasks/:id` | Manager | F3.4 — semakan konflik cuti: 409 jika cuti penuh, `warning` jika separa (§12 #6) |
 | POST | `/api/tasks/confirm` | Manager | Sahkan draf → `approval_status = 'Confirmed'` |
 | DELETE | `/api/tasks/:id` | Manager | Dua kes (2026-07-03, §12 #12): draf AI → reset ke kolam (tingkah laku lama); tugasan `Confirmed` **belum diagih** → hard-delete; sudah diagih → 404 |
-| PATCH | `/api/tasks/:id/status` | Staff atau Manager | F4.3, F4.4, UC-08 — semak pemilikan (`staffId`), terima `status` + `file` (multer) + `notes` → `staff_notes` (§12 #2 selesai, 2026-07-02) |
+| PATCH | `/api/tasks/:id/status` | Staff atau Manager | F4.3, F4.4, UC-08 — semak pemilikan (`staffId`), terima `status` + `file` (multer) + `notes` → `staff_notes` (§12 #2). Sejak 2026-07-06: `ALLOWED = Pending/In Progress/Submitted` (staf HANTAR, bukan tanda siap); tugasan `Submitted`/`Completed` dikunci (409); hantar semula kosongkan `rejection_reason` (§12 #16) |
+| PATCH | `/api/tasks/:id/review` | Manager | **Baharu (§12 #16)** — kelulusan hantaran: `{decision:'approve'\|'reject', reason?}`; approve → `Completed` + syncOrderStatus; reject → `In Progress` + `rejection_reason` (wajib); 409 jika bukan `Submitted` |
+| PATCH | `/api/tasks/:id/complete-delivery` | Manager | **Baharu (§12 #16)** — Delivery penghantaran External sahaja: admin sahkan sendiri tanpa assign staf; gerbang peringkat dikuatkuasa (409 jika peringkat awal belum siap) |
 | GET | `/api/staff/tasks/:staff_id` | Staff (sendiri sahaja) atau Manager | F4.1, F4.2, UC-07 — semakan pemilikan ditambah 2026-07-03 (§12 #13) |
 
 ### Dashboard
@@ -522,13 +527,43 @@ hujung-ke-hujung (§12 #2 selesai, 2026-07-02).
 
 ---
 
+### 10.5 Aliran Kerja Berperingkat (workflow.jpg — ditambah 2026-07-06, §12 #16)
+
+Sumber: `C:\SmartTask\workflow.jpg` (carta alir pengguna). Peringkat tetap:
+**Design → Printing → Packing → Delivery** (subset ikut `order_type`).
+
+1. **Tempahan baharu** — admin pilih jenis: *Design Only* (1 tugasan), *Product
+   Only* (3 tugasan, mula di Printing, fail design pelanggan wajib), *Design &
+   Product* (4 tugasan).
+2. **Agihan berperingkat** — AI/Round-Robin/manual HANYA boleh agih tugasan
+   peringkat AKTIF (semua peringkat lebih awal `Completed`); dikuatkuasakan oleh
+   `isTaskAssignable()` (penapisan kolam) + `validateAssignment()` (422 per-kad).
+3. **Staf buat & HANTAR** — `status='Submitted'`; tugasan dikunci daripada staf.
+4. **Admin semak hantaran** (`PATCH /api/tasks/:id/review`) — *disahkan* →
+   `Completed`, peringkat seterusnya terbuka; *tidak sah* → kembali
+   `In Progress` + `rejection_reason` (staf baiki & hantar semula — gelung carta).
+5. **Delivery**: *internal* → staf ditugaskan seperti biasa; *external (JNT dsb.)*
+   → TIADA agihan staf; admin `Tandakan Siap` (`complete-delivery`).
+6. **Status order AUTOMATIK** (`syncOrderStatus`, dipanggil pada: save-assignments,
+   generate-schedule, confirm, review-approve, complete-delivery, DELETE task,
+   PUT task): `Pending` → belum ada tugasan Confirmed+diagih; `In Progress` →
+   ≥1 diagih; `Completed` → SEMUA tugasan `Completed` ("tempahan siap" carta);
+   `Cancelled` → hanya melalui butang **Batalkan Tempahan** (padam semua tugasan).
+   Dropdown status manual & `PATCH /api/orders/:id/status` DIBUANG.
+
+---
+
 ## 11. Enjin AI — Aliran Kerja Terperinci
 
 Endpoint: `POST /api/manager/auto-assign`
 
 **Peringkat 1 — Kumpul Data (SQL):** orders `Pending`/`In Progress` → tasks tanpa
-`assigned_staff_id` (JOIN orders) → staff `status='Aktif'` → kira beban kerja semasa
-→ rekod cuti `Approved` yang `end_date >= hari ini`.
+`assigned_staff_id` (JOIN orders) → **ditapis `isTaskAssignable()`** (2026-07-06,
+§10.5: hanya peringkat AKTIF setiap order; Delivery external dikecualikan terus)
+→ staff `status='Aktif'` → kira beban kerja semasa (kini termasuk `Submitted`)
+→ rekod cuti `Approved` yang `end_date >= hari ini`. Prompt Gemini diberi nota
+eksplisit bahawa senarai sudah ditapis kepada peringkat aktif — AI tidak akan
+mencadangkan peringkat seterusnya sebelum kelulusan admin.
 
 **Peringkat 2 — Semak Konflik Cuti (JS, `getLeaveStatusForTask()`):** untuk setiap
 pasangan (tugasan × staf), kira pertindihan tempoh cuti dengan tempoh tugasan
@@ -734,6 +769,42 @@ operator merentas 2 staf berbeza; auto-assign disahkan tiada tulisan DB;
 (`POST /api/staff`) tidak diubah — 'Operator Am' jatuh ke prefix lalai `staf`;
 4 prefix lama kini kod mati (calon kemasan berasingan).
 
+**#16 — ✅ SELESAI (2026-07-06) — Aliran kerja tempahan berperingkat (workflow.jpg) + jenis tempahan + status automatik**
+Perubahan besar berbilang lapisan (spec brainstorming:
+`docs/superpowers/specs/2026-07-06-order-workflow-design.md`; pelan diluluskan
+pengguna). Ringkasan penuh dalam §10.5; komponen:
+(a) **Skema** (`migrations/add_order_workflow.sql`, dijalankan pada DB tempatan):
+`orders.order_type` + `orders.design_file_path`; `tasks.status` +`'Submitted'`;
+`tasks.rejection_reason`; **pembetulan bonus** — ENUM `orders.status` DB tempatan
+lama tiada `'Cancelled'` (nilai disimpan `''` senyap; ditemui bila terminate
+diuji live) → ALTER selaras `schema.sql`.
+(b) **Jenis tempahan**: `POST /api/orders` kini multipart + jana tugasan bersyarat
+(Design Only=1 / Product Only=3 mula Printing / Design & Product=4); multer baharu
+`/uploads/orders/` (JPG/PNG/PDF 5MB); Product Only wajib fail design (400 jika tiada).
+(c) **Gerbang peringkat**: `isTaskAssignable()` menapis kolam auto-assign +
+generate-schedule; `validateAssignment()` +2 semakan (gerbang peringkat, Delivery
+external) → ralat per-kad JanaanJadual berfungsi automatik; `PUT /api/tasks/:id`
+turut memanggilnya (409).
+(d) **Kelulusan hantaran**: staf `Submitted` (bukan lagi `Completed`; dikunci
+selepas hantar); `PATCH /api/tasks/:id/review` approve/reject+sebab;
+`PATCH /api/tasks/:id/complete-delivery` untuk Delivery external.
+(e) **Status order automatik** `syncOrderStatus()` — 7 titik panggilan (§10.5);
+`PATCH /api/orders/:id/status` DIBUANG; `POST /api/orders/:id/terminate` baharu.
+(f) **UI**: TempahanBaru (pilihan jenis + upload bersyarat), Tempahan (timeline
+visual + baris tugasan per-peringkat + Lulus/Tolak/Tandakan Siap + Batalkan),
+JanaanJadual (seksyen "Menunggu Kelulusan" + lajur kanban ke-4), TugasanStaf
+(Hantar Tugasan, sebab penolakan, pautan design pelanggan), Cuti (KPI klik →
+/staf), Layout (badge '1' hardcode dibuang; sidebar boleh-lipat), StaffLayout
+(loceng hiasan dibuang; sidebar boleh-lipat, pilihan dikongsi localStorage).
+**Bukti:** jest **169/169** (21 kes baharu/dikemaskini); ujian live hujung-ke-hujung
+(MySQL sebenar + supertest, 21/21 semakan): 3 jenis order → bilangan tugasan betul;
+round-robin hanya agih peringkat aktif; 422 gerbang peringkat; aliran penuh
+hantar→tolak→hantar semula→lulus→order auto-Completed; Delivery external
+disekat/dikecualikan/disahkan admin; terminate padam tugasan + Cancelled + 409
+ulangan; `npm run build` lulus. Data ujian dibersihkan.
+*JANGAN SENTUH dipatuhi:* `getLeaveStatusForTask` & logik teras Gemini kekal —
+hanya lapisan penapisan/validasi ditambah.
+
 **#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
 `INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`
 (`server.js`). Disahkan tiada lagi rujukan `Orders` huruf besar dalam
@@ -853,6 +924,19 @@ Frontend/src/
 - Model 2-peranan (§12 #15, 2026-07-05): dropdown jawatan pada
   `SenaraiStaf.jsx` (Tambah Staf) dan `DetailStaf.jsx` (edit) kini hanya
   `Designer` | `Operator Am`.
+- Aliran berperingkat (§12 #16, 2026-07-06): `TempahanBaru.jsx` — pemilih
+  jenis tempahan (3 kad radio) + placeholder upload fail design muncul HANYA
+  untuk Product Only, submit multipart; `Tempahan.jsx` — dropdown status
+  DIBUANG, diganti timeline visual (Pending → Dalam Proses → Selesai;
+  Cancelled = keadaan merah), baris tugasan per-peringkat dengan butang
+  Lulus/Tolak-dengan-sebab/Tandakan Siap (Delivery external) + butang
+  "Batalkan Tempahan" dengan dialog pengesahan; `JanaanJadual.jsx` — seksyen
+  "Menunggu Kelulusan" (senarai `Submitted` + Lulus/Tolak), lajur kanban
+  ke-4 "Menunggu Kelulusan"; `TugasanStaf.jsx` — pilihan "Hantar Tugasan"
+  menggantikan Selesai, kotak sebab penolakan, pautan design pelanggan,
+  tindakan dikunci bila Submitted/Completed; sidebar KEDUA-DUA portal
+  boleh-lipat (`.sidebar--collapsed`, pilihan `localStorage['sidebarCollapsed']`);
+  badge '1' hardcode (Layout) dan loceng hiasan (StaffLayout) dibuang.
 
 **Belum dibina:** dropdown hover profil di bahagian bawah-kiri sidebar (item ini
 **masih** dalam senarai tertunggak — tiada padanan `hover`/`dropdown`/

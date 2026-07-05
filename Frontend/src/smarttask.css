@@ -306,6 +306,69 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    transition: margin-left 0.2s ease;
+}
+
+/* ── Sidebar boleh-lipat (collapse/expand) ── */
+.sidebar {
+    transition: width 0.2s ease, min-width 0.2s ease;
+}
+
+.sidebar-collapse-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px;
+    margin: 6px 8px 0;
+    border-radius: 8px;
+}
+
+.sidebar-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+}
+
+.sidebar--collapsed {
+    width: 64px;
+    min-width: 64px;
+}
+
+.sidebar--collapsed .sidebar-brand-text,
+.sidebar--collapsed .sidebar-section-label,
+.sidebar--collapsed .nav-link span,
+.sidebar--collapsed .nav-badge,
+.sidebar--collapsed .sidebar-user-info,
+.sidebar--collapsed .sidebar-user-chevron {
+    display: none;
+}
+
+.sidebar--collapsed .sidebar-brand {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.sidebar--collapsed .nav-link {
+    justify-content: center;
+    padding: 9px 0;
+    margin: 2px 10px;
+}
+
+.sidebar--collapsed .nav-link.active {
+    border-left: none;
+    padding-left: 0;
+}
+
+.sidebar--collapsed .sidebar-user-trigger {
+    justify-content: center;
+}
+
+.main-area--sidebar-collapsed {
+    margin-left: 64px;
 }
 
 /* ============================================================

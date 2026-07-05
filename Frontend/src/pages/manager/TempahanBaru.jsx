@@ -25,10 +25,18 @@ const JENIS_ITEM_OPTIONS = [
     { value: 'lain', label: 'Lain-lain' },
 ];
 
+// ── Jenis tempahan (menentukan tugasan yang dijana oleh backend) ──
+const JENIS_TEMPAHAN_OPTIONS = [
+    { value: 'Design Only',      label: 'Design Sahaja',   desc: 'Pelanggan perlukan khidmat design sahaja — tempahan siap selepas design diluluskan.' },
+    { value: 'Product Only',     label: 'Produk Sahaja',   desc: 'Pelanggan sudah ada design sendiri — lampirkan fail design; kerja bermula terus di Printing.' },
+    { value: 'Design & Product', label: 'Design & Produk', desc: 'Syarikat uruskan design DAN penghasilan produk — aliran penuh dari Design hingga Delivery.' },
+];
+
 // ── State awal borang ──
 const INITIAL_FORM = {
     namaKlien: '',
     jenisItem: '',
+    jenisTempahan: 'Design & Product',
     kuantiti: '',
     harga: '',
     tarikhSiap: '',
@@ -84,6 +92,7 @@ export default function TempahanBaru() {
 
     // ── Form state ──
     const [form, setForm] = useState(INITIAL_FORM);
+    const [designFile, setDesignFile] = useState(null); // fail design pelanggan (Product Only)
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState(null); // { type: 'success'|'error', message: '' }
     const [errors, setErrors] = useState({});   // inline validation errors
@@ -109,6 +118,8 @@ export default function TempahanBaru() {
             newErrors.harga = 'Sila masukkan harga yang sah.';
         if (!form.tarikhSiap) newErrors.tarikhSiap = 'Tarikh siap diperlukan.';
         if (!form.lokasiHantar.trim()) newErrors.lokasiHantar = 'Lokasi penghantaran diperlukan.';
+        if (form.jenisTempahan === 'Product Only' && !designFile)
+            newErrors.designFile = "Fail design pelanggan wajib dilampirkan untuk tempahan 'Produk Sahaja'.";
         return newErrors;
     }
 
@@ -126,17 +137,20 @@ export default function TempahanBaru() {
             return;
         }
 
-        // Sediakan payload
-        const formData = {
-            namaKlien: form.namaKlien.trim(),
-            jenisItem: form.jenisItem,
-            kuantiti: Number(form.kuantiti),
-            harga: Number(form.harga),
-            tarikhSiap: form.tarikhSiap,
-            jenisHantar: form.jenisHantar,
-            lokasiHantar: form.lokasiHantar.trim(),
-            nota: form.nota.trim(),
-        };
+        // Sediakan payload multipart (fail design pelanggan disertakan jika ada)
+        const formData = new FormData();
+        formData.append('namaKlien', form.namaKlien.trim());
+        formData.append('jenisItem', form.jenisItem);
+        formData.append('order_type', form.jenisTempahan);
+        formData.append('kuantiti', Number(form.kuantiti));
+        formData.append('harga', Number(form.harga));
+        formData.append('tarikhSiap', form.tarikhSiap);
+        formData.append('jenisHantar', form.jenisHantar);
+        formData.append('lokasiHantar', form.lokasiHantar.trim());
+        formData.append('nota', form.nota.trim());
+        if (form.jenisTempahan === 'Product Only' && designFile) {
+            formData.append('design_file', designFile);
+        }
 
         try {
             setLoading(true);
@@ -146,6 +160,7 @@ export default function TempahanBaru() {
             // Berjaya
             setAlert({ type: 'success', message: 'Tempahan berjaya disimpan! Borang telah dikosongkan.' });
             setForm(INITIAL_FORM);
+            setDesignFile(null);
             setErrors({});
 
             // Auto-navigate ke senarai tempahan selepas 2 saat (pilihan)
@@ -153,7 +168,8 @@ export default function TempahanBaru() {
 
         } catch (err) {
             console.error('Ralat simpan tempahan:', err);
-            const msg = err?.response?.data?.message
+            const msg = err?.response?.data?.error
+                ?? err?.response?.data?.message
                 ?? err?.message
                 ?? 'Ralat tidak diketahui. Sila cuba lagi.';
             setAlert({ type: 'error', message: `Gagal menyimpan tempahan: ${msg}` });
@@ -165,6 +181,7 @@ export default function TempahanBaru() {
     // ── Reset handler ──
     function handleReset() {
         setForm(INITIAL_FORM);
+        setDesignFile(null);
         setErrors({});
         setAlert(null);
     }
@@ -264,6 +281,75 @@ export default function TempahanBaru() {
                                 <span style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>
                                     {errors.namaKlien}
                                 </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ── Baris 1.5: Jenis Tempahan (menentukan aliran tugasan) ── */}
+                    <div style={{ marginBottom: 20 }}>
+                        <div className="form-group">
+                            <label className="form-label">
+                                Jenis Tempahan <span className="required">*</span>
+                            </label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {JENIS_TEMPAHAN_OPTIONS.map(opt => (
+                                    <label key={opt.value} style={{
+                                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                                        padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+                                        border: form.jenisTempahan === opt.value
+                                            ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
+                                        background: form.jenisTempahan === opt.value ? '#EFF6FF' : '#fff',
+                                    }}>
+                                        <input
+                                            type="radio"
+                                            name="jenisTempahan"
+                                            value={opt.value}
+                                            checked={form.jenisTempahan === opt.value}
+                                            onChange={handleChange}
+                                            style={{ marginTop: 3 }}
+                                        />
+                                        <span>
+                                            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: '#0F172A' }}>
+                                                {opt.label}
+                                            </span>
+                                            <span style={{ display: 'block', fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                                                {opt.desc}
+                                            </span>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            {/* Placeholder upload — muncul HANYA untuk 'Produk Sahaja' */}
+                            {form.jenisTempahan === 'Product Only' && (
+                                <div style={{
+                                    marginTop: 10, padding: '14px 16px', borderRadius: 10,
+                                    border: errors.designFile ? '1.5px dashed #EF4444' : '1.5px dashed #93C5FD',
+                                    background: '#F8FAFC',
+                                }}>
+                                    <label className="form-label" style={{ marginBottom: 6 }}>
+                                        Fail Design Pelanggan <span className="required">*</span>
+                                    </label>
+                                    <input
+                                        type="file"
+                                        accept=".jpg,.jpeg,.png,.pdf"
+                                        onChange={e => {
+                                            setDesignFile(e.target.files?.[0] || null);
+                                            if (errors.designFile) setErrors(prev => ({ ...prev, designFile: '' }));
+                                        }}
+                                        style={{ fontSize: 13 }}
+                                    />
+                                    <span style={{ display: 'block', fontSize: 11.5, color: '#64748B', marginTop: 6 }}>
+                                        {designFile
+                                            ? `Dipilih: ${designFile.name}`
+                                            : 'JPG, PNG atau PDF (maksimum 5MB) — design sedia ada daripada pelanggan.'}
+                                    </span>
+                                    {errors.designFile && (
+                                        <span style={{ display: 'block', fontSize: 12, color: '#EF4444', marginTop: 4 }}>
+                                            {errors.designFile}
+                                        </span>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </div>
