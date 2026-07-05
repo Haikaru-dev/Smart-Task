@@ -389,7 +389,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 ### Dashboard
 | Kaedah | Endpoint | Guard | F / UC |
 |---|---|---|---|
-| GET | `/api/dashboard/stats` | Manager | UC-06 — kiraan `onLeave` kini `COUNT(DISTINCT staff_id)` + `CURDATE()` MySQL (§12 #14, 2026-07-03) |
+| GET | `/api/dashboard/stats` | Manager | UC-06 — kiraan `onLeave` kini `COUNT(DISTINCT staff_id)` + `CURDATE()` MySQL (§12 #14, 2026-07-03); `activeStaff` kini bermaksud **"sedia bertugas hari ini"** (status `Aktif` DAN tiada cuti Approved meliputi hari ini, `NOT IN` subquery — 2026-07-05), supaya `activeStaff + onLeave` = jumlah staf Aktif sebenar |
 | GET | `/api/dashboard/audit-logs` | Manager | UC-06 (Jejak Audit) |
 | GET | `/api/dashboard/order-trends` | Manager | *(tiada dalam FYP asal — ciri tambahan)* |
 | GET | `/api/dashboard/staff-performance` | Manager | *(tiada dalam FYP asal — ciri tambahan)* |
@@ -468,6 +468,15 @@ tempatan masih belum ditetapkan).
 MySQL (`beginTransaction`/`commit`/`rollback`) — disahkan dalam kod, bukan sekadar
 dakwaan. Keperluan "respons < 3 saat setiap kemaskini status" tidak boleh disahkan
 secara statik — perlu ujian beban sebenar jika hendak dilaporkan dalam FYP.
+
+**(d) Ketepatan data dashboard** *(ditambah 2026-07-05)* — KPI `activeStaff` pada
+`/api/dashboard/stats` kini bermaksud **"sedia bertugas hari ini"** (status
+pekerjaan `Aktif` DAN tiada cuti `Approved` yang meliputi hari ini), bukan sekadar
+kiraan mentah status pekerjaan — selaras dengan footer kad "Bertugas hari ini"
+yang sedia terpapar di `Dashboard.jsx`. Dengan itu `activeStaff + onLeave` =
+jumlah staf `Aktif` sebenar (disahkan live: 8 staf, 2 bercuti → 6 + 2 = 8);
+staf `Tidak Aktif` tidak dikira dalam mana-mana KPI ini. Kedua-dua kiraan guna
+`CURDATE()` MySQL (satu sumber masa, §12 #14).
 
 ---
 

@@ -334,9 +334,14 @@ app.get('/api/dashboard/stats', verifyToken, requireRole('Manager'), async (req,
         const [[{ completed }]] = await db.query(
             `SELECT COUNT(*) AS completed FROM orders WHERE status = 'Completed'`
         );
-        // Kira staf Aktif
+        // Kira staf sedia bertugas hari ini (Aktif DAN bukan sedang bercuti)
         const [[{ activeStaff }]] = await db.query(
-            `SELECT COUNT(*) AS activeStaff FROM staff WHERE status = 'Aktif'`
+            `SELECT COUNT(*) AS activeStaff FROM staff
+             WHERE status = 'Aktif'
+             AND id NOT IN (
+                 SELECT staff_id FROM leaves
+                 WHERE status = 'Approved' AND CURDATE() BETWEEN start_date AND end_date
+             )`
         );
         // Kira staf UNIK sedang cuti hari ini (CURDATE() MySQL elak isu zon waktu Node)
         const [[{ onLeave }]] = await db.query(
