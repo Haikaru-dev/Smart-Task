@@ -349,9 +349,9 @@ telah diperbetulkan sejak nota audit terdahulu).
 ### Staf
 | Kaedah | Endpoint | Guard | F / UC |
 |---|---|---|---|
-| GET | `/api/staff` | Manager | Jadual 3.1 (Admin lihat senarai staf) |
+| GET | `/api/staff` | Manager | Jadual 3.1 (Admin lihat senarai staf) — kini turut pulangkan lajur terbitan `is_on_leave_today` (EXISTS subquery ke `leaves`, `CURDATE()` MySQL; §12 #14, 2026-07-03) |
 | POST | `/api/staff` | Manager | UC-02 |
-| GET | `/api/staff/:id` | Staff (sendiri sahaja) **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga — semakan pemilikan ditambah 2026-07-03 (§12 #13) |
+| GET | `/api/staff/:id` | Staff (sendiri sahaja) **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga — semakan pemilikan ditambah 2026-07-03 (§12 #13); turut pulangkan `is_on_leave_today` (§12 #14) |
 | PUT | `/api/staff/:id` | Manager | UC-02 — kemaskini penuh (nama + jawatan) oleh Admin, UI edit-in-place pada `DetailStaf.jsx` (ditambah 2026-07-02) |
 | DELETE | `/api/staff/:id` | Manager | UC-02 (alt: "Padam Staf") — ada guard halang padam akaun sendiri |
 | POST | `/api/staff/:id/profile-picture` | Staff (sendiri) atau Manager | F6.1, UC-02, UC-10 — multer berasingan (JPG/PNG, had 2MB, folder `/uploads/staff/`), fail dipadam jika 403/404 (§12 #5) |
@@ -389,7 +389,7 @@ telah diperbetulkan sejak nota audit terdahulu).
 ### Dashboard
 | Kaedah | Endpoint | Guard | F / UC |
 |---|---|---|---|
-| GET | `/api/dashboard/stats` | Manager | UC-06 |
+| GET | `/api/dashboard/stats` | Manager | UC-06 — kiraan `onLeave` kini `COUNT(DISTINCT staff_id)` + `CURDATE()` MySQL (§12 #14, 2026-07-03) |
 | GET | `/api/dashboard/audit-logs` | Manager | UC-06 (Jejak Audit) |
 | GET | `/api/dashboard/order-trends` | Manager | *(tiada dalam FYP asal — ciri tambahan)* |
 | GET | `/api/dashboard/staff-performance` | Manager | *(tiada dalam FYP asal — ciri tambahan)* |
@@ -644,6 +644,43 @@ Manager kekal tanpa sekatan. **Bukti:** `npm test` = **148/148 lulus**
 200 sendiri / 200 Manager untuk setiap route). Rujuk TEST_REPORT.md
 "Ujian Semula — Isu #A".
 
+**#14 — ✅ SELESAI (2026-07-03) — Percanggahan kiraan staf bercuti (3 sumber berbeza, tiada satu pun konsisten)**
+Punca: tiga tempat cuba jawab "siapa bercuti hari ini" secara berasingan:
+(a) `GET /api/dashboard/stats` guna `COUNT(*)` atas `leaves` — kira **baris**
+cuti, bukan staf unik (staf dengan 2 rekod bertindih dikira 2×), dan guna
+`new Date()` Node.js sebagai "hari ini" (terdedah anjakan zon waktu);
+(b) `Cuti.jsx` kira semula sendiri di browser; (c) `GET /api/staff` dan
+`GET /api/staff/:id` langsung tidak rujuk `leaves` — hanya papar
+`staff.status` mentah yang **tidak pernah** dikemaskini oleh mana-mana kod
+bila cuti diluluskan. Pembetulan (satu sumber kebenaran, kira LIVE setiap
+bacaan):
+(a) `dashboard/stats`: `COUNT(DISTINCT staff_id)` + `CURDATE() BETWEEN
+start_date AND end_date` — staf unik, tarikh ikut jam DB, pembolehubah
+`today` Node dibuang daripada handler ini;
+(b) `GET /api/staff` dan `GET /api/staff/:id`: lajur terbitan
+`is_on_leave_today` melalui `EXISTS` subquery ke `leaves` (corak sama,
+`CURDATE()`), **tanpa** mengubah lajur `staff.status` sedia ada.
+*Keputusan reka bentuk:* `staff.status` kekal medan status pekerjaan yang
+ditetapkan admin (Aktif/Cuti/Tidak Aktif) dan kekal dipakai sebagai penapis
+kelayakan agihan — cuti harian TIDAK menulis balik ke lajur ini kerana tiada
+mekanisme nyahtulis automatik selepas cuti tamat (risiko staf terlekat
+'Cuti' selamanya); sebaliknya dikira live melalui `CURDATE()`.
+*Skop tidak disentuh:* `PUT /api/manager/leaves/:id` dan semakan konflik
+cuti laluan agihan (`getLeaveStatusForTask`, §12 #6) — berasingan dan betul.
+**Susulan frontend (2026-07-03, prompt kedua):** (c) `SenaraiStaf.jsx`
+(senarai + modal detail) papar badge terbitan — keutamaan `Tidak Aktif` →
+`is_on_leave_today` ("Cuti", `badge--warning` sedia ada dalam
+`smarttask.css`) → "Aktif"; (d) `Cuti.jsx` buang kiraan client-side
+`onLeaveToday` — kini fetch `onLeave` daripada `GET /api/dashboard/stats`
+(state + `useEffect`), disegarkan dalam `useAutoRefresh` dan selepas
+lulus/tolak cuti; `thisMonthCount`/`pendingCount` kekal client-side
+(tiada isu konsistensi merentas halaman). **Bukti:** `npm run build` lulus;
+ujian live (MySQL sebenar + supertest, logik badge verbatim): staf dengan
+cuti Approved hari ini → "Cuti" pada senarai & modal, staf tanpa cuti →
+"Aktif", `Tidak Aktif` kekal keutamaan tertinggi, `staff.status` DB tidak
+berubah; `Cuti.jsx` & `Dashboard.jsx` baca medan `onLeave` yang sama —
+sepadan secara binaan. Data ujian dibersihkan.
+
 **#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
 `INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`
 (`server.js`). Disahkan tiada lagi rujukan `Orders` huruf besar dalam
@@ -749,6 +786,15 @@ Frontend/src/
 - Reka bentuk semula UI Tempahan: baris jadual boleh diklik (gantikan butang
   "Lihat Detail"), butang "+ Tambah Tempahan" pada header senarai (gantikan
   pautan sidebar "Tempahan Baru" berasingan).
+- Papar status **terbitan** staf (§12 #14, 2026-07-03): `SenaraiStaf.jsx`
+  (senarai + modal detail) kini pilih badge ikut keutamaan
+  `Tidak Aktif` (`badge--danger`) → `is_on_leave_today` daripada backend
+  ("Cuti", `badge--warning`) → "Aktif" (`badge--success`) — bukan lagi
+  paparan mentah `staff.status` dua-nilai. Kad KPI "Staf Bercuti Hari Ini"
+  pada `Cuti.jsx` pula ambil `onLeave` daripada `GET /api/dashboard/stats`
+  (sumber sama dengan `Dashboard.jsx` — nombor sentiasa sepadan), bukan
+  kiraan semula client-side; disegarkan melalui `useAutoRefresh` dan selepas
+  lulus/tolak cuti.
 
 **Belum dibina:** dropdown hover profil di bahagian bawah-kiri sidebar (item ini
 **masih** dalam senarai tertunggak — tiada padanan `hover`/`dropdown`/

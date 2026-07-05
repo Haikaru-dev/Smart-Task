@@ -14,7 +14,7 @@ jest.mock('@google/generative-ai', () => ({
 
 const app = require('../server');
 
-const JWT_SECRET = 'smarttask_dev_secret_TUKAR_DI_PRODUKSI';
+const JWT_SECRET = process.env.JWT_SECRET || 'smarttask_dev_secret_TUKAR_DI_PRODUKSI';
 
 let katalaluanHash; // bcrypt hash of 'kataLaluan123'
 

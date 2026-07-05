@@ -75,21 +75,26 @@ export default function Cuti() {
     }
   }
 
+  // ── Staf bercuti hari ini: ambil daripada backend (satu sumber kebenaran,
+  //    sama dengan Dashboard) — bukan kiraan semula client-side ──
+  const [onLeaveToday, setOnLeaveToday] = useState(0);
+
+  async function fetchOnLeaveCount() {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/dashboard/stats`);
+      setOnLeaveToday(res.data.onLeave);
+    } catch { /* biar 0 jika gagal, jangan pecahkan halaman */ }
+  }
+
   useEffect(() => {
     fetchLeaves();
+    fetchOnLeaveCount();
   }, []);
 
   // ── Auto-refresh: papar permohonan cuti baru daripada staf tanpa perlu reload ──
-  useAutoRefresh(() => fetchLeaves(true));
+  useAutoRefresh(() => { fetchLeaves(true); fetchOnLeaveCount(); });
 
   // ── Statistik kad ──
-  const today = new Date().toISOString().slice(0, 10);
-  const onLeaveToday = leaves.filter(l => {
-    return l.status?.toLowerCase() === 'approved' &&
-      l.start_date?.slice(0, 10) <= today &&
-      l.end_date?.slice(0, 10) >= today;
-  }).length;
-
   const thisMonth = new Date().toISOString().slice(0, 7);
   const thisMonthCount = leaves.filter(l => l.applied_at?.slice(0, 7) === thisMonth).length;
   const pendingCount   = leaves.filter(l => l.status?.toLowerCase() === 'pending').length;
@@ -109,6 +114,7 @@ export default function Cuti() {
       setRejectModal(null);
       setRejectReason('');
       fetchLeaves();
+      fetchOnLeaveCount();
     } catch (err) {
       setActionToast({ type: 'error', text: err.response?.data?.error || 'Gagal mengemas kini status cuti.' });
     } finally {

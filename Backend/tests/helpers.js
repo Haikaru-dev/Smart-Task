@@ -3,7 +3,7 @@
 // Fail ini TIDAK berakhir dengan .test.js, jadi jest tidak menganggapnya sut ujian.
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = 'smarttask_dev_secret_TUKAR_DI_PRODUKSI';
+const JWT_SECRET = process.env.JWT_SECRET || 'smarttask_dev_secret_TUKAR_DI_PRODUKSI';
 
 // Token Manager sah (userId 1, tiada staffId — sama seperti akaun admin sebenar)
 function tokenManager(overrides = {}) {

@@ -338,12 +338,10 @@ app.get('/api/dashboard/stats', verifyToken, requireRole('Manager'), async (req,
         const [[{ activeStaff }]] = await db.query(
             `SELECT COUNT(*) AS activeStaff FROM staff WHERE status = 'Aktif'`
         );
-        // Kira staf sedang cuti hari ini (status Approved & tarikh merangkumi hari ini)
-        const today = new Date().toISOString().slice(0, 10);
+        // Kira staf UNIK sedang cuti hari ini (CURDATE() MySQL elak isu zon waktu Node)
         const [[{ onLeave }]] = await db.query(
-            `SELECT COUNT(*) AS onLeave FROM leaves 
-             WHERE status = 'Approved' AND start_date <= ? AND end_date >= ?`,
-            [today, today]
+            `SELECT COUNT(DISTINCT staff_id) AS onLeave FROM leaves
+             WHERE status = 'Approved' AND CURDATE() BETWEEN start_date AND end_date`
         );
 
         // Kira tempahan In Progress
@@ -486,7 +484,15 @@ app.get('/api/dashboard/leave-stats', verifyToken, requireRole('Manager'), async
 // Endpoint untuk mendapatkan senarai staf
 app.get('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
     try {
-        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, s.profile_picture_url, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.full_name ASC`;
+        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status,
+                            s.profile_picture_url, u.username,
+                            EXISTS(
+                                SELECT 1 FROM leaves l
+                                WHERE l.staff_id = s.id AND l.status = 'Approved'
+                                AND CURDATE() BETWEEN l.start_date AND l.end_date
+                            ) AS is_on_leave_today
+                     FROM staff s LEFT JOIN users u ON u.id = s.user_id
+                     ORDER BY s.full_name ASC`;
         const [results] = await db.query(sql);
         res.status(200).json(results);
     } catch (err) {
@@ -571,7 +577,15 @@ app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (r
             return res.status(403).json({ error: 'Akses ditolak. Anda hanya boleh akses data sendiri.' });
         }
 
-        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status, s.email, s.phone_number, s.profile_picture_url, u.username FROM staff s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`;
+        const sql = `SELECT s.id, s.full_name AS name, s.job_title AS role, s.status,
+                            s.email, s.phone_number, s.profile_picture_url, u.username,
+                            EXISTS(
+                                SELECT 1 FROM leaves l
+                                WHERE l.staff_id = s.id AND l.status = 'Approved'
+                                AND CURDATE() BETWEEN l.start_date AND l.end_date
+                            ) AS is_on_leave_today
+                     FROM staff s LEFT JOIN users u ON u.id = s.user_id
+                     WHERE s.id = ?`;
         const [results] = await db.query(sql, [staffId]);
         if (results.length === 0) {
             return res.status(404).json({ message: "Staf tidak dijumpai" });

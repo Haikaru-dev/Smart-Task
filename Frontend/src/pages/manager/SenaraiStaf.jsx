@@ -187,8 +187,12 @@ export default function SenaraiStaf() {
                     </td>
                     <td>{s.role}</td>
                     <td>
-                      <span className={`badge ${s.status === 'Aktif' ? 'badge--success' : 'badge--danger'}`}>
-                        {s.status}
+                      <span className={`badge ${
+                        s.status === 'Tidak Aktif' ? 'badge--danger'
+                        : s.is_on_leave_today ? 'badge--warning'
+                        : 'badge--success'
+                      }`}>
+                        {s.status === 'Tidak Aktif' ? 'Tidak Aktif' : s.is_on_leave_today ? 'Cuti' : 'Aktif'}
                       </span>
                     </td>
                   </tr>
@@ -244,13 +248,19 @@ export default function SenaraiStaf() {
                     { label: 'Peranan / Jawatan', value: selectedStaff.role || '-' },
                     { label: 'Emel Rasmi',        value: selectedStaff.email || '-' },
                     { label: 'No. Telefon',       value: selectedStaff.phone_number || '-' },
-                    { label: 'Status Pekerja',      value: null, badge: selectedStaff.status },
+                    {
+                      label: 'Status Pekerja', value: null,
+                      badge: selectedStaff.status === 'Tidak Aktif' ? 'Tidak Aktif'
+                        : selectedStaff.is_on_leave_today ? 'Cuti' : 'Aktif',
+                      badgeCls: selectedStaff.status === 'Tidak Aktif' ? 'badge--danger'
+                        : selectedStaff.is_on_leave_today ? 'badge--warning' : 'badge--success',
+                    },
                     { label: 'Nama Pengguna (Login)', value: selectedStaff.username || '-' },
-                  ].map(({ label, value, badge }) => (
+                  ].map(({ label, value, badge, badgeCls }) => (
                     <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={detailPanelStyles.infoLabel}>{label}</span>
                       {badge ? (
-                        <span className={`badge ${badge === 'Aktif' ? 'badge--success' : 'badge--danger'}`} style={{ width: 'fit-content' }}>{badge}</span>
+                        <span className={`badge ${badgeCls}`} style={{ width: 'fit-content' }}>{badge}</span>
                       ) : (
                         <span style={detailPanelStyles.infoValue}>{value}</span>
                       )}
