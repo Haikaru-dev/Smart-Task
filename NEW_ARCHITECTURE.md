@@ -225,7 +225,7 @@ Kamus Data FYP" membandingkan dengan Jadual 3.17–3.22 rasmi.
 |---|---|---|
 | id | INT PK | |
 | full_name | VARCHAR(150) | |
-| job_title | VARCHAR(100) | Nilai sah: `Designer`, `Operator Digital`, `Operator Mesin (Banner/Bunting)`, `Finishing`, `Pengurusan / Admin` |
+| job_title | VARCHAR(100) | Nilai sah (model 2-peranan sejak 2026-07-05, §12 #15): `Designer`, `Operator Am`. Nilai `Manager` kekal untuk akaun pengurus (bukan peranan operasi). 5 jawatan lama dijajarkan melalui `migrations/migrate_to_two_roles.sql` (sudah dijalankan pada DB tempatan) |
 | status | ENUM('Aktif','Cuti','Tidak Aktif') DEFAULT 'Aktif' | Dipakai enjin AI untuk tapis staf tersedia |
 | email | VARCHAR(150) NULL | |
 | phone_number | VARCHAR(20) NULL | |
@@ -349,9 +349,9 @@ telah diperbetulkan sejak nota audit terdahulu).
 ### Staf
 | Kaedah | Endpoint | Guard | F / UC |
 |---|---|---|---|
-| GET | `/api/staff` | Manager | Jadual 3.1 (Admin lihat senarai staf) — kini turut pulangkan lajur terbitan `is_on_leave_today` (EXISTS subquery ke `leaves`, `CURDATE()` MySQL; §12 #14, 2026-07-03) |
+| GET | `/api/staff` | Manager | Jadual 3.1 (Admin lihat senarai staf) — kini turut pulangkan lajur terbitan `is_on_leave_today` dan `leave_end_date` (subquery ke `leaves`, `CURDATE()` MySQL); susunan `ORDER BY is_on_leave_today DESC, full_name` — staf bercuti di atas (§12 #14, 2026-07-03/05) |
 | POST | `/api/staff` | Manager | UC-02 |
-| GET | `/api/staff/:id` | Staff (sendiri sahaja) **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga — semakan pemilikan ditambah 2026-07-03 (§12 #13); turut pulangkan `is_on_leave_today` (§12 #14) |
+| GET | `/api/staff/:id` | Staff (sendiri sahaja) **atau** Manager | UC-02 (alt), dipakai `ProfilStaf.jsx` juga — semakan pemilikan ditambah 2026-07-03 (§12 #13); turut pulangkan `is_on_leave_today` + `leave_end_date` (§12 #14) |
 | PUT | `/api/staff/:id` | Manager | UC-02 — kemaskini penuh (nama + jawatan) oleh Admin, UI edit-in-place pada `DetailStaf.jsx` (ditambah 2026-07-02) |
 | DELETE | `/api/staff/:id` | Manager | UC-02 (alt: "Padam Staf") — ada guard halang padam akaun sendiri |
 | POST | `/api/staff/:id/profile-picture` | Staff (sendiri) atau Manager | F6.1, UC-02, UC-10 — multer berasingan (JPG/PNG, had 2MB, folder `/uploads/staff/`), fail dipadam jika 403/404 (§12 #5) |
@@ -541,19 +541,29 @@ delivery_location, available_staff[] dengan workload + compressed_window).
 | Output | `assignments[]`: `task_id`, `staff_id`, `start_time`/`end_time` (ISO 8601) |
 | Retry | Sehingga 3×, backoff linear 1s/2s/3s |
 
-Arahan prompt: padanan kemahiran (Design→Designer, Printing→Operator, Packing/
-Delivery→Finishing), keutamaan `due_date` terdekat, anggaran masa (Design 4–8 jam;
-Printing/Packing 1 jam/100 unit, min 1 jam), waktu kerja 09:00–18:00.
+Arahan prompt (model 2-peranan sejak 2026-07-05, §12 #15): padanan kemahiran
+(Design→HANYA Designer; Printing/Packing/Delivery→HANYA Operator Am) + arahan
+pembahagian rata (1a): beban Operator Am dikira merentas KETIGA-TIGA jenis
+tugasan bersama, jangan bebankan satu Operator Am sementara yang lain kosong;
+keutamaan `due_date` terdekat, anggaran masa (Design 4–8 jam; Printing/Packing
+1 jam/100 unit, min 1 jam), waktu kerja 09:00–18:00.
 
 **Peringkat 5 — Respons & Pengesahan:** AI pulang `assignments[]` sebagai
 **cadangan sahaja** (tiada auto-simpan) → papar untuk semakan Admin → Admin terima/
 ubah → `POST /api/tasks/save-assignments` simpan dalam **satu transaksi MySQL**.
 
-**Peringkat 6 (Alternatif) — Round-Robin:** `POST /api/generate-schedule`, giliran
-round-robin dengan kursor, dibalut transaksi. Sejak 2026-07-02, semakan cuti guna
-`getLeaveStatusForTask()` yang sama dengan Peringkat 2 (kini fungsi skop modul —
-§12 #6 selesai): staf yang bercuti penuh sepanjang tempoh tugasan dilangkau
-per-tugasan, dan tugasan tanpa sebarang staf tersedia dilaporkan dalam
+**Peringkat 6 (Alternatif) — Round-Robin:** `POST /api/generate-schedule`, kini
+**dua kumpulan giliran berasingan** (2026-07-05, §12 #15): kolam `Designer`
+(tugasan Design) dan kolam `Operator Am` (Printing/Packing/Delivery), setiap satu
+dengan kursor sendiri — kursor Operator Am kekal SAMA merentas ketiga-tiga jenis
+supaya beban rata. Tugasan yang kolamnya kosong dilangkau (`skippedTaskIds`).
+*Nota pembetulan:* sebelum ini round-robin TIDAK menyemak `task_type` vs
+`job_title` langsung (pusing semua staf aktif termasuk Manager) — tugasan Design
+boleh jatuh kepada operator; ini bug sebenar yang dibaiki, bukan sekadar
+penambahbaikan. Dibalut transaksi seperti sedia ada. Sejak 2026-07-02, semakan
+cuti guna `getLeaveStatusForTask()` yang sama dengan Peringkat 2 (kini fungsi
+skop modul — §12 #6 selesai): staf yang bercuti penuh sepanjang tempoh tugasan
+dilangkau per-tugasan, dan tugasan tanpa sebarang staf tersedia dilaporkan dalam
 `skippedTaskIds` tanpa menggagalkan keseluruhan janaan.
 
 **⚠️ Peringatan pembangunan (kekal daripada dokumentasi terdahulu, masih sah):**
@@ -680,6 +690,40 @@ cuti Approved hari ini → "Cuti" pada senarai & modal, staf tanpa cuti →
 "Aktif", `Tidak Aktif` kekal keutamaan tertinggi, `staff.status` DB tidak
 berubah; `Cuti.jsx` & `Dashboard.jsx` baca medan `onLeave` yang sama —
 sepadan secara binaan. Data ujian dibersihkan.
+**Susulan paparan (2026-07-05):** (e) kedua-dua endpoint staf turut pulangkan
+`leave_end_date` (subquery `MAX end_date` cuti aktif hari ini) dan senarai
+disusun `is_on_leave_today DESC` — staf bercuti di atas; (f) badge
+`SenaraiStaf.jsx` (senarai + modal) papar "Cuti hingga DD/MM"
+(`toLocaleDateString('ms-MY')`), `Tidak Aktif` kekal tanpa tarikh; (g) kad KPI
+"Staf Cuti" pada `Dashboard.jsx` kini `navigateTo: '/staf'` (corak sama kad
+"Permohonan Cuti" → `/cuti`). Diuji sebenar: susunan, tarikh, dan medan
+endpoint tunggal semuanya disahkan; build lulus.
+
+**#15 — ✅ SELESAI (2026-07-05) — Model 2-peranan (Designer | Operator Am) + pembetulan round-robin tanpa semakan kemahiran**
+Keputusan produk: 5 jawatan lama digantikan dengan 2 — `Designer` (Design
+sahaja) dan `Operator Am` (Printing + Packing + Delivery). Perubahan serentak
+merentas semua lapisan (disiplin §12 #6 — jangan biar laluan agihan terpesong):
+(a) UI dropdown jawatan (`SenaraiStaf.jsx` Tambah Staf, `DetailStaf.jsx` edit)
+→ 2 pilihan sahaja; (b) `checkSkillMatch()` → Design=Designer,
+Printing/Packing/Delivery=Operator Am; (c) prompt Gemini → peraturan kemahiran
+baharu + arahan pembahagian rata 1a (beban Operator Am dikira merentas ketiga-
+tiga jenis tugasan bersama); (d) **pembetulan bug sebenar** —
+`POST /api/generate-schedule` sebelum ini TIDAK menyemak `task_type` vs
+`job_title` langsung (satu kursor pusing SEMUA staf aktif termasuk Manager);
+kini dua kolam giliran berasingan dengan kursor sendiri (§11 Peringkat 6);
+(e) migrasi data `migrations/migrate_to_two_roles.sql` — dijalankan pada DB
+tempatan 2026-07-05: 3 baris dijajarkan ke 'Operator Am' (termasuk nilai tidak
+rasmi `'Printing Operator'` yang ditemui dalam DB — ditambah ke senarai IN
+kerana ia peranan operasi; `'Manager'` tidak disentuh); (f) komen + data seed
+`schema.sql` diselaraskan; (g) `staff.test.js` payload `'Finishing'` →
+`'Operator Am'`. **Bukti (diuji sebenar, MySQL + supertest):** 1 Design +
+3 Printing/Packing/Delivery dengan 3 Operator Am → Design ke Designer sahaja,
+3 tugasan operator ke 3 Operator Am BERBEZA (berselang-seli); cadangan Gemini
+sebenar (API key aktif): kesemua 4 cadangan patuh peraturan baharu, agihan
+operator merentas 2 staf berbeza; auto-assign disahkan tiada tulisan DB;
+`npm test` 148/148; data ujian dibersihkan. *Nota:* `PREFIX_MAP` username
+(`POST /api/staff`) tidak diubah — 'Operator Am' jatuh ke prefix lalai `staf`;
+4 prefix lama kini kod mati (calon kemasan berasingan).
 
 **#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
 `INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`
@@ -786,15 +830,20 @@ Frontend/src/
 - Reka bentuk semula UI Tempahan: baris jadual boleh diklik (gantikan butang
   "Lihat Detail"), butang "+ Tambah Tempahan" pada header senarai (gantikan
   pautan sidebar "Tempahan Baru" berasingan).
-- Papar status **terbitan** staf (§12 #14, 2026-07-03): `SenaraiStaf.jsx`
+- Papar status **terbitan** staf (§12 #14, 2026-07-03/05): `SenaraiStaf.jsx`
   (senarai + modal detail) kini pilih badge ikut keutamaan
   `Tidak Aktif` (`badge--danger`) → `is_on_leave_today` daripada backend
-  ("Cuti", `badge--warning`) → "Aktif" (`badge--success`) — bukan lagi
-  paparan mentah `staff.status` dua-nilai. Kad KPI "Staf Bercuti Hari Ini"
-  pada `Cuti.jsx` pula ambil `onLeave` daripada `GET /api/dashboard/stats`
-  (sumber sama dengan `Dashboard.jsx` — nombor sentiasa sepadan), bukan
-  kiraan semula client-side; disegarkan melalui `useAutoRefresh` dan selepas
-  lulus/tolak cuti.
+  ("Cuti hingga DD/MM" dengan `leave_end_date`, `badge--warning`) → "Aktif"
+  (`badge--success`) — bukan lagi paparan mentah `staff.status` dua-nilai;
+  staf bercuti disusun di ATAS senarai (ORDER BY backend). Kad KPI
+  "Staf Bercuti Hari Ini" pada `Cuti.jsx` pula ambil `onLeave` daripada
+  `GET /api/dashboard/stats` (sumber sama dengan `Dashboard.jsx` — nombor
+  sentiasa sepadan), bukan kiraan semula client-side; disegarkan melalui
+  `useAutoRefresh` dan selepas lulus/tolak cuti. Kad KPI "Staf Cuti"
+  `Dashboard.jsx` boleh diklik → `/staf`.
+- Model 2-peranan (§12 #15, 2026-07-05): dropdown jawatan pada
+  `SenaraiStaf.jsx` (Tambah Staf) dan `DetailStaf.jsx` (edit) kini hanya
+  `Designer` | `Operator Am`.
 
 **Belum dibina:** dropdown hover profil di bahagian bawah-kiri sidebar (item ini
 **masih** dalam senarai tertunggak — tiada padanan `hover`/`dropdown`/

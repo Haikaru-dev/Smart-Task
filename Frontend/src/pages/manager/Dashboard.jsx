@@ -133,7 +133,8 @@ export default function Dashboard() {
     { label: 'Tugasan Siap',      value: stats.completed,     modifier: 'kpi-card--green',   footer: '↑ Selesai minggu ini',                 Icon: CheckIcon    },
     { label: 'Staf Aktif',        value: stats.activeStaff,   modifier: 'kpi-card--neutral', footer: 'Bertugas hari ini',                    Icon: TeamIcon     },
     { label: 'Dalam Proses',      value: stats.inProgress,    modifier: 'kpi-card--amber',   footer: '← Sedang diproses',                   Icon: ProgressIcon },
-    { label: 'Staf Cuti',         value: stats.onLeave,       modifier: 'kpi-card--neutral', footer: 'Perlu semakan',                        Icon: LeaveIcon    },
+    { label: 'Staf Cuti',         value: stats.onLeave,       modifier: 'kpi-card--neutral', footer: 'Perlu semakan',                        Icon: LeaveIcon,
+      navigateTo: '/staf' },
     { label: 'Permohonan Cuti',   value: stats.pendingLeaves, modifier: 'kpi-card--purple',  footer: `${stats.completionRate}% tugasan siap`, Icon: CalendarIcon,
       navigateTo: '/cuti' },
   ];

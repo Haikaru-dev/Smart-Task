@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS staff (
     id           INT          NOT NULL AUTO_INCREMENT,
     full_name    VARCHAR(150) NOT NULL,
     job_title    VARCHAR(100) NOT NULL
-        COMMENT 'Nilai sah: Designer | Operator Digital | Operator Mesin (Banner/Bunting) | Finishing | Pengurusan / Admin',
+        COMMENT 'Nilai sah: Designer | Operator Am',
     status       ENUM('Aktif','Cuti','Tidak Aktif') NOT NULL DEFAULT 'Aktif',
     email        VARCHAR(150) NULL,
     phone_number VARCHAR(20)  NULL,
@@ -117,15 +117,15 @@ CREATE TABLE IF NOT EXISTS leaves (
 -- =====================================================================
 
 -- ─────────────────────────────────────────────────────────────────
--- Staf (6 pekerja dengan job_title yang variasi)
+-- Staf (6 pekerja, model 2-peranan: Designer | Operator Am)
 -- ─────────────────────────────────────────────────────────────────
 INSERT INTO staff (full_name, job_title, status, email, phone_number) VALUES
-('Ahmad Ali',      'Designer',                        'Aktif', 'ahmad@shdesign.com',   '0112345678'),
-('Siti Rahmah',    'Operator Digital',                'Aktif', 'siti@shdesign.com',    '0123456789'),
-('Farid Hassan',   'Operator Mesin (Banner/Bunting)', 'Aktif', 'farid@shdesign.com',   '0134567890'),
-('Nurul Ain',      'Finishing',                       'Aktif', 'nurul@shdesign.com',   '0145678901'),
-('Zulkifli Omar',  'Pengurusan / Admin',              'Aktif', 'zul@shdesign.com',     '0156789012'),
-('Halimah Yusof',  'Designer',                        'Aktif', 'halimah@shdesign.com', '0167890123');
+('Ahmad Ali',      'Designer',    'Aktif', 'ahmad@shdesign.com',   '0112345678'),
+('Siti Rahmah',    'Operator Am', 'Aktif', 'siti@shdesign.com',    '0123456789'),
+('Farid Hassan',   'Operator Am', 'Aktif', 'farid@shdesign.com',   '0134567890'),
+('Nurul Ain',      'Operator Am', 'Aktif', 'nurul@shdesign.com',   '0145678901'),
+('Zulkifli Omar',  'Operator Am', 'Aktif', 'zul@shdesign.com',     '0156789012'),
+('Halimah Yusof',  'Designer',    'Aktif', 'halimah@shdesign.com', '0167890123');
 
 -- ─────────────────────────────────────────────────────────────────
 -- Users (akaun login)

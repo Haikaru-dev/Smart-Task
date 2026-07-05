@@ -271,7 +271,7 @@ export default function JanaanJadual() {
         }
       }
 
-      const updated = { ...p, [field]: value };
+      const updated = { ...p, [field]: value, validationError: null };
 
       // Semak semula kesahihan kombinasi masa
       const s = field === 'start_time' ? value : p.start_time;
@@ -322,7 +322,17 @@ export default function JanaanJadual() {
       setProposals(null);
       await fetchBoard();
     } catch (err) {
-      showToast('error', err.response?.data?.error || 'Gagal menyimpan jadual. Cuba semula.');
+      const errors = err.response?.data?.validation_errors;
+      if (Array.isArray(errors) && errors.length > 0) {
+        const errorMap = new Map(errors.map(e => [String(e.task_id), e.reason]));
+        setProposals(prev => prev.map(p => ({
+          ...p,
+          validationError: errorMap.get(String(p.task_id)) || null
+        })));
+        showToast('error', `${errors.length} cadangan gagal disahkan — lihat kad bertanda merah di bawah untuk sebab tepat.`);
+      } else {
+        showToast('error', err.response?.data?.error || 'Gagal menyimpan jadual. Cuba semula.');
+      }
     } finally {
       setSavingProposal(false);
     }
@@ -590,8 +600,8 @@ export default function JanaanJadual() {
               return (
                 <div key={p.task_id} style={{
                   background: '#fff', borderRadius: 14,
-                  border: p.timeError ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0',
-                  boxShadow: p.timeError
+                  border: (p.timeError || p.validationError) ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0',
+                  boxShadow: (p.timeError || p.validationError)
                     ? '0 2px 8px rgba(185,28,28,0.08)'
                     : '0 1px 4px rgba(0,0,0,0.05)',
                   overflow: 'hidden'
@@ -692,6 +702,17 @@ export default function JanaanJadual() {
                           );
                         })}
                       </select>
+                      {p.validationError && (
+                        <div style={{
+                          marginTop: 6, padding: '6px 10px', borderRadius: 6,
+                          background: '#FEF2F2', border: '1px solid #FCA5A5',
+                          fontSize: 11, color: '#B91C1C',
+                          display: 'flex', alignItems: 'center', gap: 6
+                        }}>
+                          <WarningIcon />
+                          {p.validationError}
+                        </div>
+                      )}
                     </div>
 
                     {/* Jenis Tugasan */}

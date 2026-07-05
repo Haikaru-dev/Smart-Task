@@ -490,9 +490,13 @@ app.get('/api/staff', verifyToken, requireRole('Manager'), async (req, res) => {
                                 SELECT 1 FROM leaves l
                                 WHERE l.staff_id = s.id AND l.status = 'Approved'
                                 AND CURDATE() BETWEEN l.start_date AND l.end_date
-                            ) AS is_on_leave_today
+                            ) AS is_on_leave_today,
+                            (SELECT l.end_date FROM leaves l
+                             WHERE l.staff_id = s.id AND l.status = 'Approved'
+                             AND CURDATE() BETWEEN l.start_date AND l.end_date
+                             ORDER BY l.end_date DESC LIMIT 1) AS leave_end_date
                      FROM staff s LEFT JOIN users u ON u.id = s.user_id
-                     ORDER BY s.full_name ASC`;
+                     ORDER BY is_on_leave_today DESC, s.full_name ASC`;
         const [results] = await db.query(sql);
         res.status(200).json(results);
     } catch (err) {
@@ -583,7 +587,11 @@ app.get('/api/staff/:id', verifyToken, requireRole('Staff', 'Manager'), async (r
                                 SELECT 1 FROM leaves l
                                 WHERE l.staff_id = s.id AND l.status = 'Approved'
                                 AND CURDATE() BETWEEN l.start_date AND l.end_date
-                            ) AS is_on_leave_today
+                            ) AS is_on_leave_today,
+                            (SELECT l.end_date FROM leaves l
+                             WHERE l.staff_id = s.id AND l.status = 'Approved'
+                             AND CURDATE() BETWEEN l.start_date AND l.end_date
+                             ORDER BY l.end_date DESC LIMIT 1) AS leave_end_date
                      FROM staff s LEFT JOIN users u ON u.id = s.user_id
                      WHERE s.id = ?`;
         const [results] = await db.query(sql, [staffId]);
@@ -786,11 +794,13 @@ app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (r
             return res.status(200).json({ message: "Tiada tugasan baharu untuk diagihkan." });
         }
 
-        // B. Cari SEMUA staf aktif — semakan cuti dibuat PER-TUGASAN (due_date-aware)
+        // B. Cari SEMUA staf aktif, bahagikan ikut peranan (Designer / Operator Am)
         const [staffList] = await db.query(`SELECT * FROM staff WHERE status = 'Aktif'`);
         if (staffList.length === 0) {
             return res.status(400).json({ error: "Tiada staf aktif dalam sistem!" });
         }
+        const designers = staffList.filter(s => s.job_title === 'Designer');
+        const generalOps = staffList.filter(s => s.job_title === 'Operator Am');
 
         const todayStr = new Date().toISOString().slice(0, 10);
         const [leaveRows] = await db.query(
@@ -798,9 +808,10 @@ app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (r
             [todayStr]
         );
 
-        // C. Round-Robin — untuk setiap tugasan, cari staf seterusnya dalam giliran
-        //    yang TIDAK bercuti sepanjang tempoh tugasan tersebut (hingga due_date)
-        let cursor = 0;
+        // C. Round-Robin BERASINGAN ikut kumpulan kemahiran — kursor giliran Operator Am
+        //    kekal SAMA merentas Printing/Packing/Delivery supaya beban rata
+        let designerCursor = 0;
+        let opCursor = 0;
         const assignments = [];
         const skippedTaskIds = [];
         for (const task of tasks) {
@@ -808,13 +819,20 @@ app.post('/api/generate-schedule', verifyToken, requireRole('Manager'), async (r
                 ? task.due_date.toISOString().slice(0, 10)
                 : String(task.due_date).slice(0, 10);
 
+            const isDesignTask = task.task_type === 'Design';
+            const pool = isDesignTask ? designers : generalOps;
+
+            if (pool.length === 0) { skippedTaskIds.push(task.id); continue; }
+
+            const startCursor = isDesignTask ? designerCursor : opCursor;
             let picked = null;
-            for (let i = 0; i < staffList.length; i++) {
-                const candidate = staffList[(cursor + i) % staffList.length];
+            for (let i = 0; i < pool.length; i++) {
+                const candidate = pool[(startCursor + i) % pool.length];
                 const { isFullyOnLeave } = getLeaveStatusForTask(candidate.id, dueDateStr, leaveRows, todayStr);
                 if (!isFullyOnLeave) {
                     picked = candidate;
-                    cursor = (cursor + i + 1) % staffList.length;
+                    const nextCursor = (startCursor + i + 1) % pool.length;
+                    if (isDesignTask) designerCursor = nextCursor; else opCursor = nextCursor;
                     break;
                 }
             }
@@ -1040,9 +1058,14 @@ ${JSON.stringify(tasksForAI, null, 2)}
 
 Sila patuhi kriteria berikut:
 1. Padanan Kemahiran (Skill Matching):
-   - 'Design' -> 'Designer'
-   - 'Printing' -> 'Operator Digital' atau 'Operator Mesin (Banner/Bunting)'
-   - 'Packing' / 'Delivery' -> 'Finishing' atau Operator
+   - 'Design' -> HANYA staf 'Designer'
+   - 'Printing' / 'Packing' / 'Delivery' -> HANYA staf 'Operator Am'
+1a. Pembahagian Rata (Load Balancing): Operator Am mengendalikan TIGA jenis
+    tugasan (Printing, Packing, Delivery) — skop lebih luas daripada
+    Designer. JANGAN bebankan satu Operator Am dengan pelbagai tugasan
+    sementara Operator Am lain kosong. Agihkan secara SEIMBANG merentas
+    kesemua Operator Am yang tersedia, kira SEMUA jenis tugasan bersama
+    (bukan berasingan ikut jenis) bila nilai beban kerja (workload).
 2. Keutamaan Tarikh (Deadline Urgency): Dahulukan tugasan yang tarikh akhirnya (due_date) lebih dekat.
 3. Anggaran Masa (Duration Estimation):
    - Design: 4-8 jam (bergantung kepada maklum balas pelanggan / customer consultation dependency).
@@ -1117,9 +1140,9 @@ Panggil fungsi 'assign_tasks' dengan jawapan anda.`;
 function checkSkillMatch(taskType, jobTitle) {
     switch (taskType) {
         case 'Design':   return jobTitle === 'Designer';
-        case 'Printing': return jobTitle === 'Operator Digital' || jobTitle === 'Operator Mesin (Banner/Bunting)';
+        case 'Printing':
         case 'Packing':
-        case 'Delivery': return jobTitle === 'Finishing' || jobTitle.startsWith('Operator');
+        case 'Delivery': return jobTitle === 'Operator Am';
         default:         return true; // jenis tugasan tidak dikenali — biarkan lulus
     }
 }

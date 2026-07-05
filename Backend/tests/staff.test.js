@@ -78,17 +78,17 @@ describe('PUT /api/staff/:id — kemaskini nama + jawatan (UC-02)', () => {
         const res = await request(app)
             .put('/api/staff/5')
             .set('Authorization', `Bearer ${tokenManager()}`)
-            .send({ name: 'Nama Baharu', role: 'Finishing' });
+            .send({ name: 'Nama Baharu', role: 'Operator Am' });
 
         expect(res.status).toBe(200);
-        expect(db.query.mock.calls[0][1]).toEqual(['Nama Baharu', 'Finishing', '5']);
+        expect(db.query.mock.calls[0][1]).toEqual(['Nama Baharu', 'Operator Am', '5']);
     });
 
     it('tolak (403) jika peranan Staff', async () => {
         const res = await request(app)
             .put('/api/staff/5')
             .set('Authorization', `Bearer ${tokenStaff()}`)
-            .send({ name: 'Nama Baharu', role: 'Finishing' });
+            .send({ name: 'Nama Baharu', role: 'Operator Am' });
 
         expect(res.status).toBe(403);
         expect(db.query).not.toHaveBeenCalled();

@@ -192,7 +192,10 @@ export default function SenaraiStaf() {
                         : s.is_on_leave_today ? 'badge--warning'
                         : 'badge--success'
                       }`}>
-                        {s.status === 'Tidak Aktif' ? 'Tidak Aktif' : s.is_on_leave_today ? 'Cuti' : 'Aktif'}
+                        {s.status === 'Tidak Aktif' ? 'Tidak Aktif'
+                          : s.is_on_leave_today
+                            ? `Cuti hingga ${new Date(s.leave_end_date).toLocaleDateString('ms-MY', { day: '2-digit', month: '2-digit' })}`
+                            : 'Aktif'}
                       </span>
                     </td>
                   </tr>
@@ -251,7 +254,9 @@ export default function SenaraiStaf() {
                     {
                       label: 'Status Pekerja', value: null,
                       badge: selectedStaff.status === 'Tidak Aktif' ? 'Tidak Aktif'
-                        : selectedStaff.is_on_leave_today ? 'Cuti' : 'Aktif',
+                        : selectedStaff.is_on_leave_today
+                          ? `Cuti hingga ${new Date(selectedStaff.leave_end_date).toLocaleDateString('ms-MY', { day: '2-digit', month: '2-digit' })}`
+                          : 'Aktif',
                       badgeCls: selectedStaff.status === 'Tidak Aktif' ? 'badge--danger'
                         : selectedStaff.is_on_leave_today ? 'badge--warning' : 'badge--success',
                     },
@@ -329,10 +334,7 @@ export default function SenaraiStaf() {
                     >
                       <option value="" disabled>Pilih Peranan...</option>
                       <option value="Designer">Designer</option>
-                      <option value="Operator Mesin (Banner/Bunting)">Operator Mesin (Banner/Bunting)</option>
-                      <option value="Operator Digital">Operator Digital</option>
-                      <option value="Finishing">Finishing</option>
-                      <option value="Pengurusan / Admin">Pengurusan / Admin</option>
+                      <option value="Operator Am">Operator Am</option>
                     </select>
                   </div>
                 </div>

@@ -224,10 +224,7 @@ export default function DetailStaf() {
               >
                 <option value="" disabled>Pilih Peranan...</option>
                 <option value="Designer">Designer</option>
-                <option value="Operator Mesin (Banner/Bunting)">Operator Mesin (Banner/Bunting)</option>
-                <option value="Operator Digital">Operator Digital</option>
-                <option value="Finishing">Finishing</option>
-                <option value="Pengurusan / Admin">Pengurusan / Admin</option>
+                <option value="Operator Am">Operator Am</option>
               </select>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
