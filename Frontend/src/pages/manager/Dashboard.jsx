@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import JsonLd from '../../components/JsonLd';
 import { API_BASE_URL } from '../../config';
-import Pagination from '../../components/Pagination';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -52,21 +51,6 @@ const CalendarIcon = () => (
   </svg>
 );
 
-// ── Helper: dapatkan initials dari nama ──
-function getInitials(name = '') {
-  return name.trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??';
-}
-
-// ── Helper: tentukan badge class dari status ──
-function getBadgeClass(status = '') {
-  const s = status.toLowerCase();
-  if (s === 'selesai' || s === 'siap' || s === 'completed') return 'badge--success';
-  if (s === 'log' || s === 'info') return 'badge--info';
-  if (s === 'amaran' || s === 'warning') return 'badge--warning';
-  if (s === 'ralat' || s === 'error') return 'badge--danger';
-  return 'badge--gray';
-}
-
 // ================================================================
 // KOMPONEN UTAMA: Dashboard
 // ================================================================
@@ -77,10 +61,8 @@ export default function Dashboard() {
     pending: 0, completed: 0, activeStaff: 0, onLeave: 0,
     inProgress: 0, pendingLeaves: 0, completionRate: 0
   });
-  const [auditLogs,     setAuditLogs]     = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState(null);
-  const [logsPage,      setLogsPage]      = useState(1);
   const [orderTrends,   setOrderTrends]   = useState([]);
   const [staffPerf,     setStaffPerf]     = useState([]);
   const [leaveStats,    setLeaveStats]    = useState({ byStatus: [], pendingThisMonth: 0 });
@@ -93,16 +75,14 @@ export default function Dashboard() {
     try {
       if (!silent) setLoading(true);
 
-      const [statsRes, logsRes, trendsRes, perfRes, leaveRes] = await Promise.all([
+      const [statsRes, trendsRes, perfRes, leaveRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/dashboard/stats`),
-        axios.get(`${API_BASE_URL}/api/dashboard/audit-logs`),
         axios.get(`${API_BASE_URL}/api/dashboard/order-trends`),
         axios.get(`${API_BASE_URL}/api/dashboard/staff-performance`),
         axios.get(`${API_BASE_URL}/api/dashboard/leave-stats`),
       ]);
 
       setStats(statsRes.data);
-      setAuditLogs(logsRes.data);
       setOrderTrends(trendsRes.data);
       setStaffPerf(perfRes.data);
       setLeaveStats(leaveRes.data);
@@ -121,22 +101,24 @@ export default function Dashboard() {
     fetchDashboard();
   }, []);
 
-  // ── Auto-refresh: KPI, carta & log audit kekal terkini tanpa reload ──
+  // ── Auto-refresh: KPI & carta kekal terkini tanpa reload ──
   useAutoRefresh(() => fetchDashboard(true));
-
-  const LOGS_PAGE_SIZE = 5;
-  const paginatedLogs = auditLogs.slice((logsPage - 1) * LOGS_PAGE_SIZE, logsPage * LOGS_PAGE_SIZE);
 
   // ── KPI Card data ──
   const kpiCards = [
-    { label: 'Tempahan Pending',  value: stats.pending,       modifier: 'kpi-card--blue',    footer: '↑ Menunggu tindakan',                  Icon: ClockIcon    },
-    { label: 'Tugasan Siap',      value: stats.completed,     modifier: 'kpi-card--green',   footer: '↑ Selesai minggu ini',                 Icon: CheckIcon    },
-    { label: 'Staf Aktif',        value: stats.activeStaff,   modifier: 'kpi-card--neutral', footer: 'Bertugas hari ini',                    Icon: TeamIcon     },
-    { label: 'Dalam Proses',      value: stats.inProgress,    modifier: 'kpi-card--amber',   footer: '← Sedang diproses',                   Icon: ProgressIcon },
-    { label: 'Staf Cuti',         value: stats.onLeave,       modifier: 'kpi-card--neutral', footer: 'Perlu semakan',                        Icon: LeaveIcon,
-      navigateTo: '/staf' },
-    { label: 'Permohonan Cuti',   value: stats.pendingLeaves, modifier: 'kpi-card--purple',  footer: `${stats.completionRate}% tugasan siap`, Icon: CalendarIcon,
-      navigateTo: '/cuti' },
+    { label: 'Tempahan Pending', value: stats.pending, modifier: 'kpi-card--blue',
+      footer: '↑ Menunggu tindakan', Icon: ClockIcon, navigateTo: '/tempahan' },
+    { label: 'Tugasan Siap', value: stats.completed, modifier: 'kpi-card--green',
+      footer: '↑ Selesai minggu ini', Icon: CheckIcon, navigateTo: '/jadual' },
+    { label: 'Dalam Proses', value: stats.inProgress, modifier: 'kpi-card--amber',
+      footer: '← Sedang diproses', Icon: ProgressIcon, navigateTo: '/jadual' },
+    { label: 'Staf Aktif', value: stats.activeStaff, modifier: 'kpi-card--neutral',
+      footer: 'Bertugas hari ini', Icon: TeamIcon, navigateTo: '/staf' },
+    { label: 'Staf Cuti', value: stats.onLeave, modifier: 'kpi-card--neutral',
+      footer: 'Perlu semakan', Icon: LeaveIcon, navigateTo: '/staf', leaveAlert: true },
+    { label: 'Permohonan Cuti', value: stats.pendingLeaves, modifier: 'kpi-card--purple',
+      footer: `${stats.completionRate}% tugasan siap`, Icon: CalendarIcon,
+      navigateTo: '/cuti', leaveAlert: true },
   ];
 
   const completionDonutData = [
@@ -181,6 +163,16 @@ export default function Dashboard() {
         </p>
       </header>
 
+      {error && (
+        <div style={{
+          padding: '10px 22px', background: '#FEF3C7',
+          border: '1px solid #FDE68A', borderRadius: 8,
+          marginBottom: 16, fontSize: 12, color: '#92400E',
+        }}>
+          ⚠ {error}
+        </div>
+      )}
+
       {/* ── KPI Cards (6 cards, 3 per row) ── */}
       <section className="kpi-grid" aria-label="Ringkasan KPI"
         style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
@@ -204,12 +196,28 @@ export default function Dashboard() {
             <div className="kpi-bg-icon" aria-hidden="true">
               <card.Icon />
             </div>
-            {card.navigateTo && stats.pendingLeaves > 0 && (
-              <span style={{
-                position: 'absolute', top: 10, right: 10,
-                width: 10, height: 10, borderRadius: '50%',
-                background: '#DC2626', border: '2px solid rgba(255,255,255,0.5)',
-              }} />
+            {card.leaveAlert && stats.pendingLeaves > 0 && (
+              <span
+                title={`${stats.pendingLeaves} permohonan cuti menunggu kelulusan`}
+                aria-label={`Amaran: ${stats.pendingLeaves} permohonan cuti menunggu kelulusan`}
+                style={{
+                  position: 'absolute', top: 10, right: 10,
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 999,
+                  background: '#FEF2F2', border: '1px solid #DC2626',
+                  color: '#DC2626', fontSize: 11, fontWeight: 700,
+                  animation: 'pulseWarn 1.6s ease-in-out infinite',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5"
+                  strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                {stats.pendingLeaves}
+              </span>
             )}
           </article>
         ))}
@@ -359,71 +367,6 @@ export default function Dashboard() {
             </ResponsiveContainer>
           )}
         </div>
-      </section>
-
-      {/* ── Audit Log Section ── */}
-      <section className="section-card" aria-label="Log Audit">
-
-        <header className="section-card-header">
-          <div className="section-card-title">
-            <div className="title-accent-dot" />
-            Aktiviti Terkini
-            <span className="badge badge--gray no-dot" style={{ fontSize: 11 }}>
-              Jejak Audit
-            </span>
-          </div>
-          <span className="section-card-meta">Dikemaskini: hari ini</span>
-        </header>
-
-        {error && (
-          <div style={{
-            padding: '10px 22px',
-            background: '#FEF3C7',
-            borderBottom: '1px solid #FDE68A',
-            fontSize: 12,
-            color: '#92400E',
-          }}>
-            ⚠ {error}
-          </div>
-        )}
-
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th style={{ width: 100 }}>Masa</th>
-              <th style={{ width: 160 }}>Pengguna</th>
-              <th>Aktiviti</th>
-              <th style={{ width: 110, textAlign: 'right' }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {auditLogs.length === 0 ? (
-              <tr>
-                <td colSpan={4} style={{ textAlign: 'center', color: '#94A3B8', padding: '30px 22px' }}>
-                  Tiada aktiviti terkini
-                </td>
-              </tr>
-            ) : (
-              paginatedLogs.map((log) => (
-                <tr key={log.id ?? log.time + log.user}>
-                  <td><span className="td-mono">{log.time}</span></td>
-                  <td>
-                    <div className="user-cell">
-                      <div className="user-initials-circle">{getInitials(log.user)}</div>
-                      <span>{log.user}</span>
-                    </div>
-                  </td>
-                  <td>{log.activity}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className={`badge ${getBadgeClass(log.status)}`}>{log.status}</span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <Pagination total={auditLogs.length} page={logsPage} pageSize={LOGS_PAGE_SIZE} onChange={setLogsPage} />
-
       </section>
 
     </div>

@@ -409,30 +409,6 @@ body {
     font-weight: 500;
 }
 
-.topbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.topbar-icon-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    border: 1px solid #E5EAF0;
-    background: #F8FAFC;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.topbar-icon-btn:hover {
-    background: #EFF6FF;
-    border-color: #BFDBFE;
-}
-
 .topbar-divider {
     width: 1px;
     height: 24px;
@@ -564,6 +540,11 @@ body {
 
 .kpi-card--neutral {
     background: linear-gradient(145deg, #334155 0%, #475569 55%, #64748B 100%);
+}
+
+@keyframes pulseWarn {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    50%      { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0); }
 }
 
 .kpi-top {

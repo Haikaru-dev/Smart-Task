@@ -21,6 +21,8 @@ export default function SenaraiStaf() {
   // State untuk Panel Detail Staf
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Ambil Data Staf (silent = tiada spinner, untuk auto-refresh senyap)
   async function fetchStaff(silent = false) {
@@ -41,6 +43,11 @@ export default function SenaraiStaf() {
     fetchStaff();
   }, []);
 
+  // Reset pengesahan padam setiap kali panel detail berubah/ditutup
+  useEffect(() => {
+    setConfirmDelete(false);
+  }, [selectedStaff]);
+
   // ── Auto-refresh: senarai staf kekal terkini tanpa reload ──
   useAutoRefresh(() => fetchStaff(true));
 
@@ -57,6 +64,29 @@ export default function SenaraiStaf() {
       setDetailLoading(false);
     }
   };
+
+  // Padam staf (dengan agihan semula tugasan aktif di backend)
+  async function handleDeleteStaff() {
+    if (!selectedStaff) return;
+    setDeleting(true);
+    try {
+      const res = await axios.delete(
+        `${API_BASE_URL}/api/staff/${selectedStaff.id}`
+      );
+      const { reassigned = 0, unassigned = 0 } = res.data || {};
+      alert(
+        `Staf berjaya dipadam. ${reassigned} tugasan diagih semula` +
+        (unassigned > 0 ? `, ${unassigned} tugasan menunggu agihan.` : '.')
+      );
+      setSelectedStaff(null);
+      setConfirmDelete(false);
+      fetchStaff();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Gagal memadam staf.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Uruskan perubahan input borang
   const handleChange = (e) => {
@@ -271,6 +301,33 @@ export default function SenaraiStaf() {
                       )}
                     </div>
                   ))}
+                </div>
+
+                <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 20,
+                              paddingTop: 16, display: 'flex',
+                              justifyContent: 'flex-end', gap: 8 }}>
+                  {!confirmDelete ? (
+                    <button className="btn btn--danger"
+                      onClick={() => setConfirmDelete(true)}>
+                      Padam Staf
+                    </button>
+                  ) : (
+                    <>
+                      <span style={{ alignSelf: 'center', fontSize: 12,
+                                     color: '#DC2626', fontWeight: 600 }}>
+                        Padam staf ini? Tugasan aktif akan diagih semula dan akaun
+                        login akan dilupuskan secara kekal.
+                      </span>
+                      <button className="btn btn--secondary" disabled={deleting}
+                        onClick={() => setConfirmDelete(false)}>
+                        Batal
+                      </button>
+                      <button className="btn btn--danger" disabled={deleting}
+                        onClick={handleDeleteStaff}>
+                        {deleting ? 'Memadam...' : 'Ya, Padam'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}

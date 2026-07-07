@@ -37,7 +37,6 @@ const ICONS = {
     staff: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
     leave: 'M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z M16 3H8a2 2 0 0 0-2 2v2h12V5a2 2 0 0 0-2-2z',
     logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
-    bell: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0',
     chevron: 'M6 9l6 6 6-9',
 };
 
@@ -189,18 +188,6 @@ function Topbar() {
                 <span className="bc-item">{parent}</span>
                 <span className="bc-separator">/</span>
                 <span className="bc-item active">{current}</span>
-            </div>
-
-            {/* Actions */}
-            <div className="topbar-actions">
-                {/* Bell icon */}
-                <button className="topbar-icon-btn" title="Notifikasi">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                        stroke="#64748B" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                    </svg>
-                </button>
             </div>
         </header>
     );

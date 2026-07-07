@@ -738,9 +738,10 @@ app.delete('/api/staff/:id', verifyToken, requireRole('Manager'), async (req, re
     try {
         await connection.beginTransaction();
 
-        // Ambil user_id sebelum padam (untuk padam akaun login selepas)
+        // Ambil user_id + job_title sebelum padam (untuk padam akaun login &
+        // agihan semula tugasan selepas ini)
         const [[staffRow]] = await connection.query(
-            `SELECT user_id FROM staff WHERE id = ?`, [staffId]
+            `SELECT user_id, job_title FROM staff WHERE id = ?`, [staffId]
         );
         if (!staffRow) {
             await connection.rollback();
@@ -753,6 +754,58 @@ app.delete('/api/staff/:id', verifyToken, requireRole('Manager'), async (req, re
             return res.status(400).json({ error: "Tidak boleh memadam akaun kakitangan yang dipautkan kepada akaun anda sendiri." });
         }
 
+        // Agihkan semula tugasan aktif (Pending/In Progress) staf ini kepada staf
+        // aktif lain dengan job_title sama sebelum rekodnya dipadam — Submitted/
+        // Completed dibiarkan, FK SET NULL akan uruskan.
+        const [openTasks] = await connection.query(
+            `SELECT tasks.id, orders.due_date
+             FROM tasks JOIN orders ON tasks.order_id = orders.id
+             WHERE tasks.assigned_staff_id = ?
+               AND tasks.status IN ('Pending','In Progress')`,
+            [staffId]
+        );
+
+        let reassignedCount = 0, unassignedCount = 0;
+        if (openTasks.length > 0) {
+            const [pool] = await connection.query(
+                `SELECT id FROM staff
+                 WHERE status = 'Aktif' AND job_title = ? AND id != ?`,
+                [staffRow.job_title, staffId]
+            );
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const [leaveRows] = await connection.query(
+                `SELECT * FROM leaves WHERE status = 'Approved' AND end_date >= ?`,
+                [todayStr]
+            );
+            let cursor = 0;
+            for (const task of openTasks) {
+                const dueDateStr = task.due_date instanceof Date
+                    ? task.due_date.toISOString().slice(0, 10)
+                    : String(task.due_date).slice(0, 10);
+                let picked = null;
+                for (let i = 0; i < pool.length; i++) {
+                    const cand = pool[(cursor + i) % pool.length];
+                    const { isFullyOnLeave } =
+                        getLeaveStatusForTask(cand.id, dueDateStr, leaveRows, todayStr);
+                    if (!isFullyOnLeave) {
+                        picked = cand;
+                        cursor = (cursor + i + 1) % pool.length;
+                        break;
+                    }
+                }
+                if (picked) {
+                    await connection.query(
+                        `UPDATE tasks SET assigned_staff_id = ? WHERE id = ?`,
+                        [picked.id, task.id]
+                    );
+                    reassignedCount++;
+                } else {
+                    // Tiada staf layak — biarkan, FK SET NULL akan uruskan
+                    unassignedCount++;
+                }
+            }
+        }
+
         // Padam akaun login dahulu — jika proses terhenti, akaun tidak boleh digunakan lagi
         if (staffRow.user_id) {
             await connection.query(`DELETE FROM users WHERE id = ?`, [staffRow.user_id]);
@@ -762,7 +815,11 @@ app.delete('/api/staff/:id', verifyToken, requireRole('Manager'), async (req, re
         await connection.query(`DELETE FROM staff WHERE id = ?`, [staffId]);
 
         await connection.commit();
-        res.status(200).json({ message: "Staf berjaya dipadam." });
+        res.status(200).json({
+            message: "Staf berjaya dipadam.",
+            reassigned: reassignedCount,
+            unassigned: unassignedCount
+        });
     } catch (err) {
         await connection.rollback();
         console.error("Ralat DELETE /api/staff/:id:", err);
