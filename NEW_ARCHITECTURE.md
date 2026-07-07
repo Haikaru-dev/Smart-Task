@@ -440,7 +440,7 @@ terdahulu "12/17 + 3 separa" tersilap kira; jadual sentiasa jadi rujukan.)*
 
 | UC | Nama | Status | Nota |
 |---|---|---|---|
-| UC-01 | Log Sesi Pengguna | ✅ Patuh | |
+| UC-01 | Log Sesi Pengguna | ✅ Patuh | Login disatukan (2026-07-06): SATU skrin `/login` bercabang ikut peranan seperti UC-01/F1.4 — `LoginStaf.jsx` (pintu kedua berlebihan yang menolak Manager) dipadam; `/staf/login` redirect ke `/login` (elak 404 bookmark); interceptor 401/403 hala semua peranan ke `/login` |
 | UC-02 | Mengurus Akaun Staf | ✅ Patuh | Tambah + kemaskini penuh + padam + gambar profil, semuanya lengkap (2026-07-02) |
 | UC-03 | Menambah Tempahan | ✅ Patuh | Bug case-sensitivity dibetulkan (§12 #4 selesai, 2026-07-02) |
 | UC-04 | Menjana & Kemaskini Tugasan | ✅ Patuh (+ lebih) | Draf-sahkan tidak dalam spek asal tapi selamat & berfungsi |
@@ -653,9 +653,9 @@ Amaran startup ditambah dalam `server.js` (selepas `dotenv.config`): jika
 Fallback dalam `middleware/auth.js`/`server.js`/`tests/login.test.js`
 **sengaja dikekalkan** sebagai selamat-gagal dev. Disahkan semasa ujian:
 amaran muncul bila tiada, hilang bila ditetapkan.
-⚠️ **Tindakan pengguna masih perlu:** `.env` tempatan disahkan (2026-07-02)
-**belum** tetapkan `JWT_SECRET` — jana nilai rawak (arahan dalam
-`Backend/.env.example`) sebelum sebarang demo/produksi.
+✅ **Kemas kini 2026-07-06:** `JWT_SECRET` kini SUDAH ditetapkan dalam `.env`
+tempatan — tetapi penetapan itu mendedahkan bug urutan require yang menyebabkan
+semua token baharu gagal (lihat **#17**, selesai).
 
 **#12 — ✅ SELESAI (2026-07-03) — Tiada penjanaan tugasan automatik untuk Tempahan baharu (F3.1)**
 Punca: `POST /api/orders` hanya INSERT ke `orders` — tiada `INSERT INTO tasks`
@@ -805,6 +805,25 @@ ulangan; `npm run build` lulus. Data ujian dibersihkan.
 *JANGAN SENTUH dipatuhi:* `getLeaveStatusForTask` & logik teras Gemini kekal —
 hanya lapisan penapisan/validasi ditambah.
 
+**#17 — ✅ SELESAI (2026-07-06) — Urutan require: verifyToken guna JWT_SECRET fallback lapuk → semua token baharu 401 serta-merta**
+Punca: `server.js` `require('./middleware/auth')` (baris 12) berjalan SEBELUM
+`dotenv.config()` (baris 15). `auth.js` menangkap `process.env.JWT_SECRET` pada
+masa muat modul — ketika itu `.env` belum dibaca, jadi `verifyToken` terperangkap
+dengan fallback dev selama-lamanya. Handler login pula membaca
+`process.env.JWT_SECRET` pada masa permintaan (selepas dotenv) — dapat nilai
+sebenar. Ketidaksepadanan secret tandatangan-vs-sahih menyebabkan SEMUA token
+yang baru dikeluarkan gagal `jwt.verify` serta-merta (pengguna ditendang keluar
+beberapa saat selepas log masuk). Bug ini tersembunyi selagi `JWT_SECRET` tidak
+ditetapkan (kedua-dua pihak guna fallback sama) dan hanya muncul SELEPAS
+pengguna menetapkan `JWT_SECRET` dalam `.env` (tindakan yang disyorkan §12 #3 —
+ironinya pembetulan itu mendedahkan bug ini). Pembetulan: `dotenv.config()`
+dipindah ke baris PERTAMA `server.js`, sebelum semua `require` lain; `db.js` dan
+`auth.js` tidak disentuh (kedua-duanya betul). **Bukti (diuji sebenar):**
+`middleware/auth.js` kini membaca nilai `.env` (bukan fallback); pengguna
+sementara bcrypt → POST /api/login → token → GET /api/staff = **200** (bukan
+401); jest 169/169 termasuk `login.test.js`. *Nota operasi:* perubahan ini
+memerlukan **restart penuh** `node server.js`.
+
 **#4 — ✅ SELESAI (2026-07-02) — Bug case-sensitivity `Orders` (UC-03)**
 `INSERT INTO Orders` → `INSERT INTO orders` dalam `POST /api/orders`
 (`server.js`). Disahkan tiada lagi rujukan `Orders` huruf besar dalam
@@ -893,7 +912,8 @@ Frontend/src/
     │       JanaanJadual.jsx, SenaraiStaf.jsx, DetailStaf.jsx, Cuti.jsx,
     │       ProfilAdmin.jsx
     └── staff/
-        ├── LoginStaf.jsx, TugasanStaf.jsx, CutiStaf.jsx, ProfilStaf.jsx
+        ├── TugasanStaf.jsx, CutiStaf.jsx, ProfilStaf.jsx
+        │   (LoginStaf.jsx DIPADAM 2026-07-06 — login disatukan ke /login, §8 UC-01)
 ```
 
 **Ciri terkini yang SUDAH dibina** (disahkan git log — bukan lagi "on the horizon"):

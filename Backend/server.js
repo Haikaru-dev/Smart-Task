@@ -1,7 +1,11 @@
-// test: trigger review gate
+// Muatkan pembolehubah persekitaran DAHULU — middleware/auth.js membaca
+// process.env.JWT_SECRET semasa dimuatkan (require), jadi dotenv.config()
+// MESTI jalan sebelum mana-mana require yang bergantung kepada process.env.
+const dotenv = require('dotenv');
+dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
+
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
@@ -10,9 +14,6 @@ const multer = require('multer');
 const db = require('./db');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { verifyToken, requireRole } = require('./middleware/auth');
-
-// Muatkan pembolehubah persekitaran (environment variables)
-dotenv.config({ path: require('path').resolve(__dirname, '../.env') });
 
 if (!process.env.JWT_SECRET) {
     console.warn(

@@ -23,15 +23,11 @@ axios.interceptors.response.use(
     const isLoginEndpoint = requestUrl.includes('/api/login')
 
     if (isAuthError && !isLoginEndpoint) {
-      const path = window.location.pathname
+      // Login disatukan (UC-01/F1.4) — semua peranan ke /login
       localStorage.removeItem('authToken')
-      if (path.startsWith('/staf')) {
-        localStorage.removeItem('staffUser')
-        window.location.href = '/staf/login'
-      } else {
-        localStorage.removeItem('user')
-        window.location.href = '/login'
-      }
+      localStorage.removeItem('staffUser')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
     }
     return Promise.reject(error)
   }

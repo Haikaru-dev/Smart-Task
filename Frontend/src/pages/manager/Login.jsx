@@ -97,10 +97,14 @@ function Login() {
         navigate('/dashboard');
       } else if (userRole === 'staff') {
         // Simpan juga sebagai sesi staf
+        // Nota: `id` MESTI ialah staff.id (bukan users.id) — endpoint /api/staff/*
+        // menyemak req.user.staffId (dari JWT) terhadap :staff_id di URL (semakan IDOR),
+        // jadi guna users.id di sini akan sentiasa gagal semakan tersebut dengan 403.
         localStorage.setItem('staffUser', JSON.stringify({
-          id:   sessionData.id,
-          name: sessionData.username,
-          role: sessionData.role,
+          id:      sessionData.staffId,
+          staffId: sessionData.staffId,
+          name:    sessionData.username,
+          role:    sessionData.role,
         }));
         navigate('/staf/tugasan');
       } else {
@@ -131,8 +135,7 @@ function Login() {
     "about": {
       "@type": "SoftwareApplication",
       "name": "SmartTask System"
-    },
-    "significantLink": "http://localhost:5173/staf/login"
+    }
   };
 
   return (

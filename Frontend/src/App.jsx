@@ -21,7 +21,6 @@ import Cuti from './pages/manager/Cuti';
 import ProfilAdmin from './pages/manager/ProfilAdmin';
 
 // Portal Staf
-import LoginStaf from './pages/staff/LoginStaf';
 import TugasanStaf from './pages/staff/TugasanStaf';
 import CutiStaf from './pages/staff/CutiStaf';
 import ProfilStaf from './pages/staff/ProfilStaf';
@@ -44,7 +43,7 @@ function StaffPrivateRoute({ children }) {
     try { return JSON.parse(localStorage.getItem('staffUser') || 'null'); }
     catch { return null; }
   })();
-  return (token && staffUser?.role === 'Staff') ? children : <Navigate to="/staf/login" replace />;
+  return (token && staffUser?.role === 'Staff') ? children : <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -80,7 +79,8 @@ export default function App() {
         </Route>
 
         {/* ── Portal Staf (Layout berasingan) ── */}
-        <Route path="/staf/login" element={<LoginStaf />} />
+        {/* Login disatukan (UC-01/F1.4): URL lama redirect, elak 404 untuk bookmark */}
+        <Route path="/staf/login" element={<Navigate to="/login" replace />} />
         <Route
           element={
             <StaffPrivateRoute>
