@@ -136,11 +136,17 @@ export default function CutiStaf() {
       setSubmitting(true);
       setToast(null);
 
-      await axios.post(`${API_BASE_URL}/api/staff/leaves`, {
-        staff_id:   staffId,
-        start_date: form.start_date,
-        end_date:   form.end_date,
-        reason:     form.reason,
+      const payload = new FormData();
+      payload.append('staff_id',   staffId);
+      payload.append('start_date', form.start_date);
+      payload.append('end_date',   form.end_date);
+      payload.append('reason',     form.reason);
+      if (form.file) {
+        payload.append('file', form.file);
+      }
+
+      await axios.post(`${API_BASE_URL}/api/staff/leaves`, payload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
 
       setToast({ type: 'success', text: '✓ Permohonan cuti berjaya dihantar! Menunggu kelulusan.' });

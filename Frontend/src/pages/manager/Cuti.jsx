@@ -213,6 +213,7 @@ export default function Cuti() {
                 <th>Tarikh Mula</th>
                 <th>Tarikh Tamat</th>
                 <th>Sebab / Nota</th>
+                <th style={{ textAlign: 'center' }}>Fail Rujukan</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
                 <th style={{ textAlign: 'center' }}>Tindakan</th>
               </tr>
@@ -220,13 +221,13 @@ export default function Cuti() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
                     Memuatkan data...
                   </td>
                 </tr>
               ) : leaves.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
                     Tiada rekod cuti dijumpai.
                   </td>
                 </tr>
@@ -249,6 +250,33 @@ export default function Cuti() {
                       <td><span className="td-mono">{formatDate(rec.end_date)}</span></td>
                       <td style={{ maxWidth: 280, color: '#475569' }}>
                         <span title={rec.reason}>{rec.reason || '—'}</span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {rec.file_path ? (
+                          <a
+                            href={`${API_BASE_URL}${rec.file_path}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '4px 10px',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#2563EB',
+                              background: '#EFF6FF',
+                              border: '1px solid #BFDBFE',
+                              borderRadius: 6,
+                              textDecoration: 'none',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            📎 Lihat Fail
+                          </a>
+                        ) : (
+                          <span style={{ color: '#CBD5E1', fontSize: 12 }}>—</span>
+                        )}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <span className={cls}>{label}</span>

@@ -12,10 +12,11 @@ CREATE TABLE `leaves` (
   `status` enum('Pending','Approved','Rejected') DEFAULT 'Pending',
   `rejection_reason` varchar(500) DEFAULT NULL,
   `applied_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `file_path` varchar(500) DEFAULT NULL COMMENT 'Path relatif fail rujukan cuti',
   PRIMARY KEY (`id`),
   KEY `staff_id` (`staff_id`),
   CONSTRAINT `leaves_ibfk_1` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Table: orders
 CREATE TABLE `orders` (

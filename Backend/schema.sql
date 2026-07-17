@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS leaves (
     status           ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
     rejection_reason VARCHAR(500) NULL,
     applied_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    file_path        VARCHAR(500) NULL DEFAULT NULL COMMENT 'Path relatif fail rujukan cuti',
     PRIMARY KEY (id),
     CONSTRAINT fk_leaves_staff
         FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE

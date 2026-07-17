@@ -106,6 +106,40 @@ function uploadSingle(field) {
     };
 }
 
+// ── Konfigurasi multer untuk muat naik fail rujukan cuti ──
+const leaveUploadDir = path.join(__dirname, 'uploads', 'leaves');
+if (!fs.existsSync(leaveUploadDir)) fs.mkdirSync(leaveUploadDir, { recursive: true });
+
+const leaveStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, leaveUploadDir),
+    filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, `leave-${Date.now()}${ext}`);
+    }
+});
+
+const leaveUpload = multer({
+    storage: leaveStorage,
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Jenis fail tidak dibenarkan. Hanya JPG, PNG, dan PDF diterima.'));
+        }
+    },
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+function uploadLeaveFile(req, res, next) {
+    leaveUpload.single('file')(req, res, err => {
+        if (err instanceof multer.MulterError || err) {
+            return res.status(400).json({ error: err.message });
+        }
+        next();
+    });
+}
+
 // ── Konfigurasi multer untuk fail design pelanggan (tempahan Product Only) ──
 const orderDesignDir = path.join(__dirname, 'uploads', 'orders');
 if (!fs.existsSync(orderDesignDir)) fs.mkdirSync(orderDesignDir, { recursive: true });
@@ -1603,7 +1637,7 @@ app.get('/api/staff/leaves/:staff_id', verifyToken, requireRole('Staff', 'Manage
 });
 
 // 2. Endpoint: staf hantar permohonan cuti baharu
-app.post('/api/staff/leaves', verifyToken, requireRole('Staff', 'Manager'), async (req, res) => {
+app.post('/api/staff/leaves', verifyToken, requireRole('Staff', 'Manager'), uploadLeaveFile, async (req, res) => {
     try {
         const { staff_id, start_date, end_date, reason } = req.body;
 
@@ -1611,14 +1645,21 @@ app.post('/api/staff/leaves', verifyToken, requireRole('Staff', 'Manager'), asyn
             return res.status(400).json({ error: "Semua medan wajib diisi." });
         }
 
+        // Simpan path relatif fail jika ada
+        const filePath = req.file
+            ? `/uploads/leaves/${req.file.filename}`
+            : null;
+
         const [result] = await db.query(
-            `INSERT INTO leaves (staff_id, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, 'Pending')`,
-            [staff_id, start_date, end_date, reason]
+            `INSERT INTO leaves (staff_id, start_date, end_date, reason, status, file_path)
+             VALUES (?, ?, ?, ?, 'Pending', ?)`,
+            [staff_id, start_date, end_date, reason, filePath]
         );
 
         res.status(201).json({
             message: "Permohonan cuti berjaya dihantar!",
-            leaveId: result.insertId
+            leaveId: result.insertId,
+            file_path: filePath
         });
     } catch (err) {
         console.error("Ralat MySQL staff/leaves POST:", err);
