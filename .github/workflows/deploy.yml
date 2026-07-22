@@ -15,7 +15,9 @@ jobs:
         with:
           node-version: 20
 
-      - name: Build frontend
+     - name: Build frontend
+        env:
+          VITE_API_BASE_URL: https://smarttask.tech
         run: |
           cd Frontend
           npm ci
