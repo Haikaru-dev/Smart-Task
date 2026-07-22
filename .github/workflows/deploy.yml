@@ -1,0 +1,46 @@
+name: Deploy SmartTask
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        run: |
+          cd Frontend
+          npm ci
+          npm run build
+
+      - name: Deploy frontend build ke droplet
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete
+          path: Frontend/dist/
+          remote_path: /var/www/smarttask/Frontend/dist/
+          remote_host: ${{ secrets.DO_HOST }}
+          remote_user: ${{ secrets.DO_USERNAME }}
+          remote_key: ${{ secrets.DO_SSH_KEY }}
+
+      - name: Update & restart backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            cd /var/www/smarttask
+            git fetch origin main
+            git reset --hard origin/main
+            cd Backend
+            npm install --production
+            pm2 restart smarttask-backend
